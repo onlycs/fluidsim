@@ -1,0 +1,15 @@
+[package]
+name = "fluidsim"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-std = "1.13.0"
+log = "0.4.22"
+skuld = { git = "https://github.com/onlycs/asgard", default-features = false, features = [
+    "facade",
+    "result",
+] }
+thiserror = { git = "https://github.com/onlycs/thiserror", version = "1.0.63" }
+wgpu = "23.0.1"
+winit = "0.30.5"
