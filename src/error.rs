@@ -1,14 +1,13 @@
+use ggez::GameError;
 use std::{backtrace::Backtrace, panic::Location};
-
 use thiserror::Error;
-use winit::error::EventLoopError;
 
 #[derive(Error, Debug)]
-pub enum AppError {
-    #[error("At {location}: Event loop error:\n{source}")]
-    EventLoopError {
+pub enum InitError {
+    #[error("At {location}: ggez: game error:\n{source}")]
+    GameError {
         #[from]
-        source: EventLoopError,
+        source: GameError,
         location: &'static Location<'static>,
         backtrace: Backtrace,
     },

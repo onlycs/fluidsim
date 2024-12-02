@@ -1,30 +1,23 @@
 #![feature(error_generic_member_access)]
 
+extern crate ggez;
+#[macro_use]
 extern crate log;
 extern crate skuld;
-extern crate wgpu;
-extern crate winit;
 
-mod circle;
 mod error;
 mod logger;
 mod prelude;
-mod renderer;
 
-use crate::prelude::*;
-use renderer::App;
-use winit::event_loop::{ControlFlow, EventLoop};
+use error::InitError;
+use ggez::ContextBuilder;
 
-result!(error::AppError);
-
-fn main() -> Result<()> {
+fn main() -> Result<(), InitError> {
     logger::init();
+    info!("Starting up");
 
-    let event_loop = EventLoop::new()?;
-    let mut app = App::default();
-
-    event_loop.set_control_flow(ControlFlow::Poll);
-    event_loop.run_app(&mut app)?;
+    let cb = ContextBuilder::new("fluidsim", "angad");
+    let (mut ctx, event_loop) = cb.build()?;
 
     Ok(())
 }
