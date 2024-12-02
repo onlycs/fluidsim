@@ -5,13 +5,14 @@ extern crate skuld;
 extern crate wgpu;
 extern crate winit;
 
-mod app;
+mod circle;
 mod error;
 mod logger;
 mod prelude;
+mod renderer;
 
 use crate::prelude::*;
-use app::App;
+use renderer::App;
 use winit::event_loop::{ControlFlow, EventLoop};
 
 result!(error::AppError);

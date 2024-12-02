@@ -5,6 +5,7 @@ use crate::prelude::*;
 use state::State;
 use winit::{
     application::ApplicationHandler,
+    dpi::PhysicalSize,
     event::WindowEvent,
     event_loop::ActiveEventLoop,
     window::{Window, WindowAttributes, WindowId},
@@ -25,7 +26,11 @@ impl ApplicationHandler for App {
 
         let window = Arc::new(
             event_loop
-                .create_window(WindowAttributes::default().with_title("titleitle"))
+                .create_window(
+                    WindowAttributes::default()
+                        .with_title("fluidsim")
+                        .with_inner_size(PhysicalSize::new(500, 500)),
+                )
                 .unwrap(),
         );
 
