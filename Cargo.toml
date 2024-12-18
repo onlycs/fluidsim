@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ggez = "0.9.3"
+async-std = "1.13.0"
+ggez = { git = "https://github.com/ggez/ggez", branch = "devel" }
 log = "0.4.22"
 skuld = { git = "https://github.com/onlycs/asgard", version = "0.1.0", default-features = false, features = [
 	"facade",

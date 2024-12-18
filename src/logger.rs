@@ -7,6 +7,7 @@ pub fn init() {
         .with_level(LevelFilter::Info)
         .with_module("fluidsim", LevelFilter::Debug)
         .with_module("wgpu_hal", LevelFilter::Warn)
+        .with_module("wgpu_core", LevelFilter::Warn)
         .init()
         .unwrap();
 }
