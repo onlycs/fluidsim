@@ -1,16 +1,20 @@
-#![feature(error_generic_member_access, never_type)]
+#![feature(error_generic_member_access, never_type, let_chains)]
 
-extern crate ggez;
 #[macro_use]
 extern crate log;
+extern crate futures;
+extern crate ggez;
 extern crate skuld;
 
 mod error;
+mod gui;
+mod ipc;
 mod logger;
 mod physics;
 mod prelude;
 mod renderer;
 
+use async_std::task;
 use error::InitError;
 use ggez::{
     conf::{NumSamples, WindowMode, WindowSetup},
@@ -34,6 +38,7 @@ fn main() -> Result<(), InitError> {
 
     let state = State::new();
 
+    task::spawn_blocking(|| gui::run());
     event::run(ctx, event_loop, state)?;
 
     Ok(())

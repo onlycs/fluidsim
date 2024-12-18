@@ -6,19 +6,11 @@ use super::PXSCALE;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Particle {
     pub position: Vec2,
-    pub velocity: Vec2,
-    pub acceleration: Vec2,
-    pub mass: f32,
 }
 
 impl Particle {
-    pub fn new(position: Vec2, velocity: Vec2, acceleration: Vec2, mass: f32) -> Self {
-        Self {
-            position,
-            velocity,
-            acceleration,
-            mass,
-        }
+    pub fn new(position: Vec2) -> Self {
+        Self { position }
     }
 
     pub fn draw(&self, mesh: &mut graphics::MeshBuilder) -> Result<(), ggez::GameError> {

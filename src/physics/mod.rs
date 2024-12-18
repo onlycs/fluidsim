@@ -1,62 +1,15 @@
 pub mod particle;
+pub mod prelude;
+pub mod scene;
 
-use async_std::{
-    channel::Receiver,
-    task::{self, JoinHandle},
-};
-use ggez::glam::Vec2;
-use particle::Particle;
+use crate::prelude::*;
+use physics::prelude::*;
 use std::{
-    mem, ptr,
-    sync::{
-        atomic::{AtomicBool, AtomicPtr, Ordering},
-        Arc, Mutex,
-    },
+    future::Future,
+    sync::{Arc, Mutex},
 };
-
-use crate::renderer::message::RendererMessage;
 
 pub const PXSCALE: f32 = 30.0;
-
-#[derive(Clone, Debug)]
-pub struct Scene {
-    pub particles: Vec<Particle>,
-    width: f32,
-    height: f32,
-}
-
-impl Scene {
-    pub fn new(widthpx: f32, heightpx: f32) -> Self {
-        let width = widthpx / 2.0 / PXSCALE;
-        let height = heightpx / 2.0 / PXSCALE;
-
-        Self {
-            particles: (0..20)
-                .flat_map(|i| {
-                    let i = i as f32 - 10.0;
-
-                    (0..20).map(move |j| {
-                        let j = j as f32 - 10.0;
-
-                        Particle::new(
-                            Vec2::new(i, j),
-                            Vec2::new(0.0, 0.0),
-                            Vec2::new(0.0, 0.0),
-                            1.0,
-                        )
-                    })
-                })
-                .collect(),
-
-            width,
-            height,
-        }
-    }
-
-    pub fn update(&mut self) {
-        // todo
-    }
-}
 
 pub struct PhysicsWorkerThread {
     render: Arc<Mutex<Scene>>,
@@ -65,24 +18,34 @@ pub struct PhysicsWorkerThread {
 }
 
 impl PhysicsWorkerThread {
-    pub fn new(initw: f32, inith: f32, msg: Receiver<RendererMessage>) -> Self {
+    pub fn new(initw: f32, inith: f32) -> Self {
         let scene = Scene::new(initw, inith);
         let render = Arc::new(Mutex::new(scene.clone()));
         let render_copy = Arc::clone(&render);
 
         let thread = task::spawn(async move {
             let mut scene = Scene::new(initw, inith);
+            let msg = ipc::physics_recv();
 
             loop {
                 // receive messages
                 while let Ok(msg) = msg.try_recv() {
                     match msg {
-                        RendererMessage::Resize(wpx, hpx) => {
+                        ToPhysics::Resize(wpx, hpx) => {
                             let w = wpx / 2.0 / PXSCALE;
                             let h = hpx / 2.0 / PXSCALE;
 
                             scene.width = w;
                             scene.height = h;
+                        }
+                        ToPhysics::Gravity(g) => {
+                            // todo
+                        }
+                        ToPhysics::Pause => {
+                            // todo
+                        }
+                        ToPhysics::Step => {
+                            // todo
                         }
                     }
                 }
@@ -111,7 +74,7 @@ impl PhysicsWorkerThread {
         &self.saved
     }
 
-    pub async fn kill(self) {
-        self.thread.cancel().await;
+    pub async fn kill(self) -> impl Future<Output = Option<()>> {
+        self.thread.cancel()
     }
 }
