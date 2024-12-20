@@ -17,16 +17,7 @@ pub enum ToRenderer {
     Kill,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum ToConfig {
-    Show,
-    Hide,
-}
-
 struct UniversalIpc {
-    config_send: Sender<ToConfig>,
-    config_recv: Option<Receiver<ToConfig>>,
-
     render_send: Sender<ToRenderer>,
     render_recv: Option<Receiver<ToRenderer>>,
 
@@ -36,13 +27,10 @@ struct UniversalIpc {
 
 impl UniversalIpc {
     fn new() -> Self {
-        let (config_send, config_recv) = channel::unbounded();
         let (render_send, render_recv) = channel::unbounded();
         let (physics_send, physics_recv) = channel::unbounded();
 
         Self {
-            config_send,
-            config_recv: Some(config_recv),
             render_send,
             render_recv: Some(render_recv),
             physics_send,
@@ -79,5 +67,5 @@ macro_rules! cfg_reciever {
     };
 }
 
-cfg_sender!(config_send: ToConfig, render_send: ToRenderer, physics_send: ToPhysics);
-cfg_reciever!(config_recv: ToConfig, render_recv: ToRenderer, physics_recv: ToPhysics);
+cfg_sender!(render_send: ToRenderer, physics_send: ToPhysics);
+cfg_reciever!(render_recv: ToRenderer, physics_recv: ToPhysics);

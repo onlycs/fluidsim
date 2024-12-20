@@ -7,14 +7,12 @@ extern crate ggez;
 extern crate skuld;
 
 mod error;
-mod gui;
 mod ipc;
 mod logger;
 mod physics;
 mod prelude;
 mod renderer;
 
-use async_std::task;
 use error::InitError;
 use ggez::{
     conf::{NumSamples, WindowMode, WindowSetup},
@@ -36,10 +34,7 @@ fn main() -> Result<(), InitError> {
         .window_mode(WindowMode::default().resizable(true))
         .build()?;
 
-    let state = State::new();
-
-    task::spawn_blocking(|| gui::run());
-    event::run(ctx, event_loop, state)?;
+    event::run(ctx, event_loop, State::new())?;
 
     Ok(())
 }
