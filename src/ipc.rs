@@ -2,12 +2,13 @@ use crate::prelude::*;
 
 use async_std::channel;
 use lazy_static::lazy_static;
+use physics::settings::SimSettings;
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ToPhysics {
     Resize(f32, f32),
-    Gravity(f32),
+    Settings(SimSettings),
     Pause,
     Step,
 }
@@ -46,6 +47,7 @@ lazy_static! {
 macro_rules! cfg_sender {
     ($sender:ident: $ty:ty) => {
         pub fn $sender(msg: $ty) {
+            trace!("Sending message via {}: {:?}", stringify!($sender), msg);
             task::spawn_blocking(|| IPC.lock().unwrap().$sender.send_blocking(msg).unwrap());
         }
     };

@@ -1,12 +1,14 @@
 use super::particle::Particle;
+use super::settings::SimSettings;
 use super::PXSCALE;
 use ggez::glam::Vec2;
 
 #[derive(Clone, Debug)]
 pub struct Scene {
     pub particles: Vec<Particle>,
-    pub(crate) width: f32,
-    pub(crate) height: f32,
+    pub(super) settings: SimSettings,
+    pub(super) width: f32,
+    pub(super) height: f32,
 }
 
 impl Scene {
@@ -28,6 +30,7 @@ impl Scene {
 
             width,
             height,
+            settings: SimSettings::default(),
         }
     }
 

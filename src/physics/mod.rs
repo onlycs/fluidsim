@@ -1,6 +1,7 @@
 pub mod particle;
 pub mod prelude;
 pub mod scene;
+pub mod settings;
 
 use crate::prelude::*;
 use physics::prelude::*;
@@ -38,8 +39,8 @@ impl PhysicsWorkerThread {
                             scene.width = w;
                             scene.height = h;
                         }
-                        ToPhysics::Gravity(g) => {
-                            // todo
+                        ToPhysics::Settings(s) => {
+                            scene.settings = s;
                         }
                         ToPhysics::Pause => {
                             // todo

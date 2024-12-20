@@ -1,3 +1,5 @@
+// some stuff taken from https://github.com/NemuiSen/ggegui
+
 use std::{
     collections::{HashMap, LinkedList},
     ops::Deref,
@@ -12,6 +14,7 @@ use ggez::{
         self, BlendComponent, BlendFactor, BlendMode, BlendOperation, Canvas, DrawParam, Drawable,
         GraphicsContext, ImageFormat,
     },
+    input::keyboard,
     mint::Point2,
     winit::{
         event::MouseButton,
@@ -91,35 +94,38 @@ impl Input {
         };
 
         for key in &ctx.keyboard.pressed_physical_keys {
-            if ctx.keyboard.is_physical_key_just_pressed(&key)
-                && let PhysicalKey::Code(kc) = key
-            {
+            let PhysicalKey::Code(kc) = key else {
+                continue;
+            };
+
+            let Some(egui_key) = translate_key(kc) else {
+                continue;
+            };
+
+            if ctx.keyboard.is_physical_key_just_pressed(&key) || ctx.keyboard.is_key_repeated() {
                 self.raw.events.push(Event::Key {
-                    key: match translate_key(kc) {
-                        Some(k) => k,
-                        None => continue,
-                    },
+                    key: egui_key,
                     physical_key: None,
                     pressed: true,
-                    repeat: false,
+                    repeat: ctx.keyboard.is_key_repeated(),
                     modifiers: egui_mods,
                 });
             }
 
-            if ctx.keyboard.is_physical_key_just_released(&key)
-                && let PhysicalKey::Code(kc) = key
-            {
-                self.raw.events.push(Event::Key {
-                    key: match translate_key(kc) {
-                        Some(k) => k,
-                        None => continue,
-                    },
-                    physical_key: None,
-                    pressed: false,
-                    repeat: false,
-                    modifiers: egui_mods,
-                });
-            }
+            self.raw.events.push(Event::Text(
+                ctx.keyboard
+                    .pressed_logical_keys
+                    .iter()
+                    .filter(|k| {
+                        (ctx.keyboard.is_logical_key_just_pressed(k))
+                            && ctx.keyboard.active_modifiers.is_empty()
+                    })
+                    .filter_map(|k| match k {
+                        keyboard::Key::Character(ch) => Some(ch.as_str()),
+                        _ => None,
+                    })
+                    .collect(),
+            ));
         }
 
         let Point2 { x, y } = ctx.mouse.position();
@@ -249,6 +255,7 @@ fn translate_key(kc: &KeyCode) -> Option<Key> {
         KeyCode::Home => Key::Home,
         KeyCode::Delete => Key::Delete,
         KeyCode::End => Key::End,
+        KeyCode::Enter => Key::Enter,
 
         // Arrow Keys et. al
         KeyCode::ArrowLeft => Key::ArrowLeft,
@@ -275,7 +282,6 @@ fn translate_key(kc: &KeyCode) -> Option<Key> {
     })
 }
 
-#[derive(Default)]
 pub struct EguiTranslator {
     ctx: egui::Context,
     shapes: Vec<ClippedPrimitive>,
@@ -283,10 +289,33 @@ pub struct EguiTranslator {
     textures: HashMap<TextureId, graphics::Image>,
     textures_delta: LinkedList<TexturesDelta>,
     input: Input,
+    on: bool,
+}
+
+impl Default for EguiTranslator {
+    fn default() -> Self {
+        Self {
+            ctx: Default::default(),
+            shapes: Default::default(),
+            paints: Default::default(),
+            textures: Default::default(),
+            textures_delta: Default::default(),
+            input: Default::default(),
+            on: true,
+        }
+    }
 }
 
 impl EguiTranslator {
+    pub fn toggle(&mut self) {
+        self.on = !self.on;
+    }
+
     pub fn update(&mut self, ctx: &mut ggez::Context) {
+        if !self.on {
+            return;
+        }
+
         self.input.update(ctx);
 
         while let Some(tex) = self.textures_delta.pop_front() {

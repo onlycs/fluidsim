@@ -1,4 +1,4 @@
-#![feature(error_generic_member_access, never_type, let_chains)]
+#![feature(error_generic_member_access, never_type, let_chains, if_let_guard)]
 
 #[macro_use]
 extern crate log;

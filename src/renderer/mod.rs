@@ -91,6 +91,10 @@ impl event::EventHandler for State {
         match kc {
             KeyCode::Space => ipc::physics_send(ToPhysics::Pause),
             KeyCode::ArrowRight => ipc::physics_send(ToPhysics::Step),
+            KeyCode::KeyC => {
+                debug!("Toggling config panel");
+                self.panel.toggle();
+            }
             KeyCode::KeyQ if input.mods.control_key() => {
                 info!("Got ctrl+q, quitting!");
                 ctx.request_quit();
