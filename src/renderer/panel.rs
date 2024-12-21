@@ -6,10 +6,20 @@ use physics::settings::SimSettings;
 use super::egui_translator::EguiTranslator;
 use crate::prelude::*;
 
-#[derive(Default)]
 pub struct Panel {
     egui: EguiTranslator,
     settings: SimSettings,
+    help: bool,
+}
+
+impl Default for Panel {
+    fn default() -> Self {
+        Self {
+            egui: EguiTranslator::default(),
+            settings: SimSettings::default(),
+            help: true,
+        }
+    }
 }
 
 impl Panel {
@@ -17,10 +27,22 @@ impl Panel {
         let panel_ctx = self.egui.ctx();
         let mut updated = false;
 
-        egui::Window::new("Config Panel").show(&panel_ctx, |ui| {
+        egui::Window::new("Simulation Settings").show(&panel_ctx, |ui| {
             updated |= ui
-                .add(Slider::new(&mut self.settings.gravity, -20.0..=20.0).text("Gravity"))
+                .add(Slider::new(&mut self.settings.gravity, -100.0..=100.0).text("Gravity"))
                 .changed();
+
+            updated |= ui
+                .add(Slider::new(&mut self.settings.tps, 0..=500).text("TPS"))
+                .changed();
+
+            if self.help {
+                ui.add_space(10.0);
+                ui.label("Press space to pause the simulation");
+                ui.label("Press the right arrow to step the simulation");
+                ui.label("Press 'C' to toggle this panel");
+                ui.label("Press 'H' to toggle the help text");
+            }
         });
 
         // borrowing panel as mut
@@ -31,6 +53,10 @@ impl Panel {
         }
 
         self.egui.update(ctx);
+    }
+
+    pub fn toggle_help(&mut self) {
+        self.help = !self.help
     }
 }
 

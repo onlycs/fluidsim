@@ -95,6 +95,10 @@ impl event::EventHandler for State {
                 debug!("Toggling config panel");
                 self.panel.toggle();
             }
+            KeyCode::KeyH => {
+                debug!("Toggling help text");
+                self.panel.toggle_help();
+            }
             KeyCode::KeyQ if input.mods.control_key() => {
                 info!("Got ctrl+q, quitting!");
                 ctx.request_quit();

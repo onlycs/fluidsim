@@ -951,6 +951,7 @@ dependencies = [
  "itertools 0.13.0",
  "lazy_static",
  "log",
+ "rayon",
  "skuld",
  "thiserror 1.0.63",
 ]

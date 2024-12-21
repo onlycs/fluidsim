@@ -2,6 +2,9 @@ use super::particle::Particle;
 use super::settings::SimSettings;
 use super::PXSCALE;
 use ggez::glam::Vec2;
+use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
+
+const PHYSICS_SCALE: f32 = PXSCALE * 0.5;
 
 #[derive(Clone, Debug)]
 pub struct Scene {
@@ -35,6 +38,18 @@ impl Scene {
     }
 
     pub fn update(&mut self) {
-        // todo
+        let spt = 1.0 / self.settings.tps as f32;
+        let g = self.settings.gravity * PHYSICS_SCALE;
+
+        // vf = vi + at
+        let at = spt * g;
+        self.particles
+            .par_iter_mut()
+            .for_each(|p| p.velocity += Vec2::new(0.0, -at)); // -at because gravity
+
+        // d = vt
+        self.particles
+            .par_iter_mut()
+            .for_each(|p| p.position += p.velocity * spt);
     }
 }

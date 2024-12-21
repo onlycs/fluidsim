@@ -4,13 +4,14 @@ pub mod scene;
 pub mod settings;
 
 use crate::prelude::*;
+use async_std::sync::{Arc, Mutex};
 use physics::prelude::*;
 use std::{
     future::Future,
-    sync::{Arc, Mutex},
+    time::{Duration, Instant},
 };
 
-pub const PXSCALE: f32 = 30.0;
+pub const PXSCALE: f32 = 35.0;
 
 pub struct PhysicsWorkerThread {
     render: Arc<Mutex<Scene>>,
@@ -28,6 +29,12 @@ impl PhysicsWorkerThread {
             let mut scene = Scene::new(initw, inith);
             let msg = ipc::physics_recv();
 
+            let render = Arc::clone(&render_copy);
+
+            let mut pause = true;
+            let mut pause_next = false;
+            let mut timer = Instant::now();
+
             loop {
                 // receive messages
                 while let Ok(msg) = msg.try_recv() {
@@ -43,20 +50,47 @@ impl PhysicsWorkerThread {
                             scene.settings = s;
                         }
                         ToPhysics::Pause => {
-                            // todo
+                            pause = !pause;
+                            pause_next = false;
+                        }
+                        ToPhysics::Step if pause => {
+                            pause = false;
+                            pause_next = true;
                         }
                         ToPhysics::Step => {
-                            // todo
+                            warn!("Received step message while not paused");
                         }
                     }
                 }
 
                 // update scene
-                scene.update();
+                if pause_next {
+                    scene.update();
+
+                    pause = true;
+                    pause_next = false;
+                } else if !pause {
+                    scene.update();
+                }
 
                 // store the updated scene
-                let mut render_lock = render_copy.lock().unwrap();
+                let mut render_lock = render.lock().await;
                 *render_lock = scene.clone();
+                drop(render_lock);
+
+                // sleep
+                let el = timer.elapsed();
+                let mspt = 1000.0 / scene.settings.tps as f32;
+                let durpt = Duration::from_micros((mspt * 1000.0) as u64);
+                let sleep = durpt.saturating_sub(el);
+
+                if !sleep.is_zero() {
+                    task::sleep(sleep).await;
+                } else {
+                    warn!("Physics thread is running behind: {:?}", el - durpt);
+                }
+
+                timer = Instant::now();
             }
         });
 
@@ -68,7 +102,7 @@ impl PhysicsWorkerThread {
     }
 
     pub fn get(&mut self) -> &Scene {
-        if let Ok(render) = self.render.try_lock() {
+        if let Some(render) = self.render.try_lock() {
             self.saved = render.clone();
         }
 

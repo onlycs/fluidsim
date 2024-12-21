@@ -11,6 +11,7 @@ ggez = { git = "https://github.com/ggez/ggez", branch = "devel" }
 itertools = "0.13.0"
 lazy_static = "1.5.0"
 log = "0.4.22"
+rayon = "1.10.0"
 thiserror = { git = "https://github.com/onlycs/thiserror" }
 
 [dependencies.skuld]
