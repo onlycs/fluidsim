@@ -7,8 +7,8 @@ use physics::settings::SimSettings;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ToPhysics {
-    Resize(f32, f32),
     Settings(SimSettings),
+    Reset,
     Pause,
     Step,
 }

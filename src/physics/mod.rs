@@ -11,8 +11,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub const PXSCALE: f32 = 35.0;
-
 pub struct PhysicsWorkerThread {
     render: Arc<Mutex<Scene>>,
     saved: Scene,
@@ -20,13 +18,13 @@ pub struct PhysicsWorkerThread {
 }
 
 impl PhysicsWorkerThread {
-    pub fn new(initw: f32, inith: f32) -> Self {
-        let scene = Scene::new(initw, inith);
+    pub fn new() -> Self {
+        let scene = Scene::new();
         let render = Arc::new(Mutex::new(scene.clone()));
         let render_copy = Arc::clone(&render);
 
         let thread = task::spawn(async move {
-            let mut scene = Scene::new(initw, inith);
+            let mut scene = Scene::new();
             let msg = ipc::physics_recv();
 
             let render = Arc::clone(&render_copy);
@@ -36,18 +34,24 @@ impl PhysicsWorkerThread {
             let mut timer = Instant::now();
 
             loop {
+                // sleep
+                let el = timer.elapsed();
+                let durpt = Duration::from_secs_f32(scene.settings.tick_delay.get::<second>());
+                let sleep = durpt.saturating_sub(el);
+
+                if !sleep.is_zero() {
+                    task::sleep(sleep).await;
+                } else {
+                    warn!("Physics thread is running behind: {:?}", el - durpt);
+                }
+
+                timer = Instant::now();
+
                 // receive messages
                 while let Ok(msg) = msg.try_recv() {
                     match msg {
-                        ToPhysics::Resize(wpx, hpx) => {
-                            let w = wpx / 2.0 / PXSCALE;
-                            let h = hpx / 2.0 / PXSCALE;
-
-                            scene.width = w;
-                            scene.height = h;
-                        }
                         ToPhysics::Settings(s) => {
-                            scene.settings = s;
+                            scene.update_settings(s);
                         }
                         ToPhysics::Pause => {
                             pause = !pause;
@@ -59,6 +63,9 @@ impl PhysicsWorkerThread {
                         }
                         ToPhysics::Step => {
                             warn!("Received step message while not paused");
+                        }
+                        ToPhysics::Reset => {
+                            scene.reset();
                         }
                     }
                 }
@@ -77,20 +84,6 @@ impl PhysicsWorkerThread {
                 let mut render_lock = render.lock().await;
                 *render_lock = scene.clone();
                 drop(render_lock);
-
-                // sleep
-                let el = timer.elapsed();
-                let mspt = 1000.0 / scene.settings.tps as f32;
-                let durpt = Duration::from_micros((mspt * 1000.0) as u64);
-                let sleep = durpt.saturating_sub(el);
-
-                if !sleep.is_zero() {
-                    task::sleep(sleep).await;
-                } else {
-                    warn!("Physics thread is running behind: {:?}", el - durpt);
-                }
-
-                timer = Instant::now();
             }
         });
 

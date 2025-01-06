@@ -4,17 +4,23 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-async-std = "1.13.0"
+async-std = { version = "1.13.0", features = ["unstable"] }
 egui = "0.30.0"
 futures = "0.3.31"
 ggez = { git = "https://github.com/ggez/ggez", branch = "devel" }
 itertools = "0.13.0"
 lazy_static = "1.5.0"
 log = "0.4.22"
+num = "0.4.3"
 rayon = "1.10.0"
 thiserror = { git = "https://github.com/onlycs/thiserror" }
+typenum = "1.17.0"
+uom = { version = "0.36.0", features = ["autoconvert"] }
 
 [dependencies.skuld]
 git = "https://github.com/onlycs/asgard"
 default-features = false
 features = ["facade"]
+
+[target.'cfg(target_os = "linux")'.dependencies]
+hyprland = "0.4.0-beta.1"

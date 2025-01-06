@@ -1,8 +1,7 @@
-use crate::physics::PhysicsWorkerThread;
 use crate::prelude::*;
+use crate::{physics::PhysicsWorkerThread, vec2::Length2};
 use ggez::{
     event,
-    glam::Vec2,
     graphics::{self, DrawParam},
     input::keyboard::KeyInput,
     winit::keyboard::{KeyCode, PhysicalKey},
@@ -20,7 +19,7 @@ pub struct State {
 impl State {
     pub fn new() -> Self {
         Self {
-            physics: PhysicsWorkerThread::new(600.0, 400.0),
+            physics: PhysicsWorkerThread::new(),
             panel: Panel::default(),
         }
     }
@@ -56,7 +55,10 @@ impl event::EventHandler for State {
         sc.particles.iter().for_each(|p| p.draw(&mut mesh).unwrap());
 
         // draw the mesh to the canvas
-        canvas.draw(&graphics::Mesh::from_data(ctx, mesh.build()), Vec2::ZERO);
+        canvas.draw(
+            &graphics::Mesh::from_data(ctx, mesh.build()),
+            GlamVec2::ZERO,
+        );
 
         // draw the panel to the canvas
         canvas.draw(&*self.panel, DrawParam::new().dest([-halfw, -halfh]));
@@ -70,11 +72,18 @@ impl event::EventHandler for State {
 
     fn resize_event(
         &mut self,
-        _ctx: &mut ggez::Context,
+        ctx: &mut ggez::Context,
         width: f32,
         height: f32,
     ) -> Result<(), ggez::GameError> {
-        ipc::physics_send(ToPhysics::Resize(width, height));
+        let Some(wpos) = self.panel.update_wpos(ctx)? else {
+            return Ok(());
+        };
+
+        let wsize = Length2::new::<pixel>(width, height);
+
+        self.panel.set_window(wsize, wpos);
+
         Ok(())
     }
 
@@ -91,6 +100,7 @@ impl event::EventHandler for State {
         match kc {
             KeyCode::Space => ipc::physics_send(ToPhysics::Pause),
             KeyCode::ArrowRight => ipc::physics_send(ToPhysics::Step),
+            KeyCode::KeyR => ipc::physics_send(ToPhysics::Reset),
             KeyCode::KeyC => {
                 debug!("Toggling config panel");
                 self.panel.toggle();

@@ -1,37 +1,53 @@
-pub use ggez::glam::*;
+use super::vec2::Length2;
+use crate::prelude::*;
 use ggez::graphics;
-
-use super::PXSCALE;
+use uom::si::f32::Length;
+use vec2::{Force2, Velocity2};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Particle {
-    pub position: Vec2,
-    pub velocity: Vec2,
+    pub position: Length2,
+    pub velocity: Velocity2,
+    pub radius: Length,
+    pub mass: Mass,
 }
 
 impl Particle {
-    pub fn new(position: Vec2) -> Self {
+    pub fn new(position: Length2, radius: Length) -> Self {
         Self {
             position,
-            velocity: Vec2::ZERO,
+            velocity: Velocity2::zero(),
+            radius,
+            mass: Mass::new::<gram>(60.0),
         }
     }
 
     pub fn draw(&self, mesh: &mut graphics::MeshBuilder) -> Result<(), ggez::GameError> {
-        let Vec2 { x, y } = self.position;
-        let xpx = x * PXSCALE;
-        let ypx = y * PXSCALE;
+        let Length2 { x, y } = self.position;
+        let xpx = x.get::<pixel>();
+        let ypx = y.get::<pixel>();
 
-        trace!("Drawing particle at ({}, {}) from ({}, {})", xpx, ypx, x, y);
+        trace!(
+            "Drawing particle at ({}, {}) from ({:?}, {:?})",
+            xpx,
+            ypx,
+            x,
+            y
+        );
 
         mesh.circle(
             graphics::DrawMode::Fill(graphics::FillOptions::default()),
             [xpx, ypx],
-            7.5,
+            self.radius.get::<pixel>(),
             0.1,
             graphics::Color::WHITE,
         )?;
 
         Ok(())
+    }
+
+    pub fn apply_force(&mut self, force: Force2, tick: Time) {
+        let a = force / self.mass;
+        self.velocity += a * tick;
     }
 }
