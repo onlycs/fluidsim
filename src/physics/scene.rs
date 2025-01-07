@@ -1,10 +1,14 @@
+use core::f32;
+
 use crate::prelude::*;
-use uom::ConstZero;
-use vec2::{Force2, Length2};
+use ggez::graphics;
+use vec2::Length2;
 
 use super::particle::Particle;
 use super::settings::SimSettings;
-use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
+use rayon::iter::{
+    IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator,
+};
 
 #[derive(Clone, Debug)]
 pub struct Scene {
@@ -12,6 +16,7 @@ pub struct Scene {
     pub(super) settings: SimSettings,
 }
 
+// creation and updating scene settings, etc
 impl Scene {
     pub fn new() -> Self {
         let settings = SimSettings::default();
@@ -55,6 +60,19 @@ impl Scene {
         }
     }
 
+    pub fn update_settings(&mut self, settings: SimSettings) {
+        if self.settings.radius != settings.radius {
+            self.particles
+                .par_iter_mut()
+                .for_each(|p| p.radius = settings.radius);
+        }
+
+        self.settings = settings;
+    }
+}
+
+// actual physics
+impl Scene {
     pub fn apply_gravity(&mut self) {
         // vf = vi + at
         let at = self.settings.gravity * self.settings.tick_delay;
@@ -66,16 +84,6 @@ impl Scene {
         self.particles
             .par_iter_mut()
             .for_each(|p| p.position += p.velocity * self.settings.tick_delay);
-    }
-
-    pub fn update_settings(&mut self, settings: SimSettings) {
-        if self.settings.radius != settings.radius {
-            self.particles
-                .par_iter_mut()
-                .for_each(|p| p.radius = settings.radius);
-        }
-
-        self.settings = settings;
     }
 
     pub fn collide(&mut self) {
@@ -98,10 +106,44 @@ impl Scene {
         });
     }
 
+    pub fn draw(&self, mesh: &mut graphics::MeshBuilder) -> Result<(), ggez::GameError> {
+        for p in &self.particles {
+            p.draw(mesh)?;
+        }
+
+        Ok(())
+    }
+
     pub fn update(&mut self) {
         self.apply_gravity();
         self.update_positions();
 
         self.collide();
+    }
+}
+
+// density and pressure calculations
+impl Scene {
+    /// - dist: distance between two particles
+    /// - radius: smoothing radius
+    fn smoothing(dist: Length, radius: Length) -> f32 {
+        if dist >= radius {
+            return 0.0;
+        }
+
+        let volume = (f32::consts::PI * radius.get::<cm>().powi(4)) / 6.0;
+        let diff = radius.get::<cm>() - dist.get::<cm>();
+        diff.powi(2) / volume
+    }
+
+    fn density(&self, sample: Length2) -> f32 {
+        self.particles
+            .par_iter()
+            .map(|particle| {
+                let dist = (particle.position - sample).mag();
+                let influence = Self::smoothing(dist, self.settings.smoothing_radius);
+                particle.mass.get::<kilogram>() * influence
+            })
+            .sum()
     }
 }

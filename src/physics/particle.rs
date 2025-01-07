@@ -2,7 +2,7 @@ use super::vec2::Length2;
 use crate::prelude::*;
 use ggez::graphics;
 use uom::si::f32::Length;
-use vec2::{Force2, Velocity2};
+use vec2::Velocity2;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Particle {
@@ -18,7 +18,7 @@ impl Particle {
             position,
             velocity: Velocity2::zero(),
             radius,
-            mass: Mass::new::<gram>(60.0),
+            mass: Mass::new::<kilogram>(1.0),
         }
     }
 
@@ -44,10 +44,5 @@ impl Particle {
         )?;
 
         Ok(())
-    }
-
-    pub fn apply_force(&mut self, force: Force2, tick: Time) {
-        let a = force / self.mass;
-        self.velocity += a * tick;
     }
 }

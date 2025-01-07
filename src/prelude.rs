@@ -1,6 +1,8 @@
 pub(crate) use crate::ipc::{self, ToPhysics};
 pub(crate) use crate::{physics, vec2};
 
+pub use uom::ConstZero;
+
 pub use async_std::{
     channel::{Receiver, Sender},
     task,

@@ -52,7 +52,7 @@ impl event::EventHandler for State {
         let mut mesh = graphics::MeshBuilder::new();
 
         // draw to mesh from scene
-        sc.particles.iter().for_each(|p| p.draw(&mut mesh).unwrap());
+        sc.draw(&mut mesh)?;
 
         // draw the mesh to the canvas
         canvas.draw(

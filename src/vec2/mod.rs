@@ -112,6 +112,10 @@ macro_rules! vec2_impl {
                     {
                         GlamVec2::new(self.x.get::<N>(), self.y.get::<N>())
                     }
+
+                    pub fn mag(self) -> Quantity {
+                        (self.x * self.x + self.y * self.y).sqrt()
+                    }
                 }
 
                 impl<T: Clone, K> Div<T> for $name

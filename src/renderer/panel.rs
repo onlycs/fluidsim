@@ -123,6 +123,22 @@ impl Panel {
 
             ui.add_space(25.0);
 
+            updated |= ui
+                .add(
+                    Slider::from_get_set(
+                        0.01..=4.0,
+                        uom_slider_fn(
+                            &mut self.settings.smoothing_radius,
+                            Length::new::<cm>,
+                            Length::get::<cm>,
+                        ),
+                    )
+                    .text("Smoothing Radius (cm)"),
+                )
+                .changed();
+
+            ui.add_space(25.0);
+
             reset |= ui
                 .add(
                     Slider::new(&mut self.settings.particles.x, 1.0..=50.0)

@@ -9,6 +9,8 @@ pub struct SimSettings {
     pub gravity: Acceleration2,
     pub collision_dampening: f32,
 
+    pub smoothing_radius: Length,
+
     pub particles: GlamVec2,
     pub gap: Length,
     pub radius: Length,
@@ -28,6 +30,7 @@ impl Default for SimSettings {
             collision_dampening: 0.8,
             size: Length2::new::<pixel>(800., 600.),
             position: Length2::zero(),
+            smoothing_radius: Length::new::<cm>(0.5),
         }
     }
 }
