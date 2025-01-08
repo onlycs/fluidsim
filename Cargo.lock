@@ -1059,6 +1059,7 @@ dependencies = [
  "lazy_static",
  "log",
  "num",
+ "rand",
  "rayon",
  "skuld",
  "thiserror 1.0.63",

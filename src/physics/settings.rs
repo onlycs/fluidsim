@@ -10,6 +10,9 @@ pub struct SimSettings {
     pub collision_dampening: f32,
 
     pub smoothing_radius: Length,
+    pub target_density: f32,
+    pub pressure_multiplier: f32,
+    pub mass: Mass,
 
     pub particles: GlamVec2,
     pub gap: Length,
@@ -22,15 +25,18 @@ pub struct SimSettings {
 impl Default for SimSettings {
     fn default() -> Self {
         Self {
-            gravity: Acceleration2::new::<mps2>(0., 9.8),
-            tick_delay: Time::new::<ms>(2.85),
-            particles: GlamVec2::new(30., 30.),
-            gap: Length::new::<cm>(0.3),
+            gravity: Acceleration2::new::<mps2>(0., 0.),
+            tick_delay: Time::new::<ms>(6.0),
+            particles: GlamVec2::new(50., 50.),
+            gap: Length::new::<cm>(0.15),
             radius: Length::new::<cm>(0.05),
             collision_dampening: 0.8,
             size: Length2::new::<pixel>(800., 600.),
             position: Length2::zero(),
-            smoothing_radius: Length::new::<cm>(0.5),
+            smoothing_radius: Length::new::<cm>(2.0),
+            target_density: 1.0,
+            pressure_multiplier: 0.1,
+            mass: Mass::new::<kilogram>(1.0),
         }
     }
 }

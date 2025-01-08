@@ -1,4 +1,3 @@
-pub mod particle;
 pub mod prelude;
 pub mod scene;
 pub mod settings;

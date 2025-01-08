@@ -1,3 +1,8 @@
+use uom::{
+    si::{Dimension, Units},
+    Kind,
+};
+
 use crate::prelude::*;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 
@@ -9,10 +14,6 @@ macro_rules! vec2_impl {
             $(,{ $($extra:tt)* })? ;
         )*
     ) => {
-        pub trait Vec2<Q> {
-            fn from_quantities(x: Q, y: Q) -> Self;
-        }
-
         $(
             pub mod $little {
                 use super::*;
@@ -29,6 +30,14 @@ macro_rules! vec2_impl {
                 impl Vec2<Quantity> for $name {
                     fn from_quantities(x: Quantity, y: Quantity) -> Self {
                         $name { x, y }
+                    }
+
+                    fn x(&self) -> Quantity {
+                        self.x
+                    }
+
+                    fn y(&self) -> Quantity {
+                        self.y
                     }
                 }
 
@@ -63,6 +72,14 @@ macro_rules! vec2_impl {
 
                     pub fn of(x: Quantity, y: Quantity) -> Self {
                         $name { x, y }
+                    }
+
+                    pub fn from_glam<N>(v: GlamVec2) -> Self
+                    where
+                        N: Unit,
+                        N: uom::Conversion<f32, T = f32>,
+                    {
+                        $name::new::<N>(v.x, v.y)
                     }
 
                     pub fn dot<N>(&self, rhs: $name) -> f32
@@ -224,9 +241,7 @@ macro_rules! vec2_impl {
             }
         )*
 
-        pub trait Vec2Of: Sized {
-            type Output: Vec2<Self>;
-        }
+
 
         $(
             impl Vec2Of for $little::Quantity {
@@ -256,4 +271,74 @@ vec2_impl! {
 
     @vec2 Force2, force,
     @def uom::si::force::Unit, Force;
+}
+
+type NilQuantity = uom::si::Quantity<
+    dyn Dimension<
+        L = typenum::Z0,
+        M = typenum::Z0,
+        T = typenum::Z0,
+        I = typenum::Z0,
+        Th = typenum::Z0,
+        N = typenum::Z0,
+        J = typenum::Z0,
+        Kind = dyn Kind,
+    >,
+    dyn Units<
+        f32,
+        length = meter,
+        mass = kilogram,
+        time = second,
+        electric_current = uom::si::electric_current::ampere,
+        thermodynamic_temperature = uom::si::thermodynamic_temperature::kelvin,
+        amount_of_substance = uom::si::amount_of_substance::mole,
+        luminous_intensity = uom::si::luminous_intensity::candela,
+    >,
+    f32,
+>;
+
+pub trait Vec2<Q> {
+    fn from_quantities(x: Q, y: Q) -> Self;
+    fn x(&self) -> Q;
+    fn y(&self) -> Q;
+}
+
+pub trait Vec2Of: Sized {
+    type Output: Vec2<Self>;
+}
+
+impl Vec2Of for NilQuantity {
+    type Output = GlamVec2;
+}
+
+impl Vec2Of for f32 {
+    type Output = GlamVec2;
+}
+
+impl Vec2<NilQuantity> for GlamVec2 {
+    fn from_quantities(x: NilQuantity, y: NilQuantity) -> Self {
+        GlamVec2::new(x.into(), y.into())
+    }
+
+    fn x(&self) -> NilQuantity {
+        self.x.into()
+    }
+
+    fn y(&self) -> NilQuantity {
+        self.y.into()
+    }
+}
+
+impl Vec2<f32> for GlamVec2 {
+    fn from_quantities(x: f32, y: f32) -> Self {
+        GlamVec2::new(x, y)
+    }
+
+    fn x(&self) -> f32 {
+        self.x
+    }
+
+    fn y(&self) -> f32 {
+        self.y
+    }
 }

@@ -16,6 +16,7 @@ pub use uom::si::{
     length::{centimeter as cm, meter},
     mass::{gram, kilogram},
     time::{millisecond as ms, second},
+    velocity::meter_per_second as mps,
 };
 
 // define pixel as a unit
