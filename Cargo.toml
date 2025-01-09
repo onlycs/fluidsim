@@ -16,7 +16,6 @@ rand = "0.8.5"
 rayon = "1.10.0"
 thiserror = { git = "https://github.com/onlycs/thiserror" }
 typenum = "1.17.0"
-uom = { version = "0.36.0", features = ["autoconvert"] }
 
 [dependencies.skuld]
 git = "https://github.com/onlycs/asgard"

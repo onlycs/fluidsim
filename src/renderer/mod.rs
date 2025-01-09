@@ -1,5 +1,5 @@
+use crate::physics::PhysicsWorkerThread;
 use crate::prelude::*;
-use crate::{physics::PhysicsWorkerThread, vec2::Length2};
 use ggez::{
     event,
     graphics::{self, DrawParam},
@@ -55,10 +55,7 @@ impl event::EventHandler for State {
         sc.draw(&mut mesh)?;
 
         // draw the mesh to the canvas
-        canvas.draw(
-            &graphics::Mesh::from_data(ctx, mesh.build()),
-            GlamVec2::ZERO,
-        );
+        canvas.draw(&graphics::Mesh::from_data(ctx, mesh.build()), Vec2::ZERO);
 
         // draw the panel to the canvas
         canvas.draw(&*self.panel, DrawParam::new().dest([-halfw, -halfh]));
@@ -80,7 +77,7 @@ impl event::EventHandler for State {
             return Ok(());
         };
 
-        let wsize = Length2::new::<pixel>(width, height);
+        let wsize = Vec2::new(width, height);
 
         self.panel.set_window(wsize, wpos);
 

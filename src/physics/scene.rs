@@ -1,16 +1,16 @@
 use core::f32;
-use std::time::Instant;
 
 use crate::{gradient::LinearGradient, prelude::*};
 use ggez::graphics::{self, FillOptions};
 use itertools::Itertools;
-use vec2::{Acceleration2, Length2, Velocity2};
 
 use super::settings::SimSettings;
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator,
-    IntoParallelRefMutIterator, ParallelBridge, ParallelIterator,
+    IntoParallelRefMutIterator, ParallelIterator,
 };
+
+const SCALE: f32 = 100.0;
 
 fn rad1((x, y): (isize, isize)) -> [(isize, isize); 9] {
     [
@@ -33,8 +33,8 @@ pub struct SpacialLookup {
 }
 
 impl SpacialLookup {
-    fn pos_to_cell(pos: Length2, settings: SimSettings) -> (isize, isize) {
-        let cell_size = settings.smoothing_radius * 2.0;
+    fn pos_to_cell(pos: Vec2, settings: SimSettings) -> (isize, isize) {
+        let cell_size = settings.smoothing_radius;
         let x = f32::from(pos.x / cell_size).floor();
         let y = f32::from(pos.y / cell_size).floor();
 
@@ -50,7 +50,7 @@ impl SpacialLookup {
         h as usize
     }
 
-    fn update(&mut self, positions: &Vec<Length2>, settings: SimSettings) {
+    fn update(&mut self, positions: &Vec<Vec2>, settings: SimSettings) {
         let mut lookup = positions
             .par_iter()
             .map(|pos| {
@@ -73,6 +73,10 @@ impl SpacialLookup {
         }
     }
 
+    fn len(&self) -> usize {
+        self.starts.iter().filter(|n| n != &&usize::MAX).count()
+    }
+
     fn get_by_key(&self, key: usize) -> &[usize] {
         let idx = *self.starts.get(key).unwrap_or(&usize::MAX);
 
@@ -93,10 +97,10 @@ impl SpacialLookup {
 
 #[derive(Clone, Debug)]
 pub struct Scene {
-    pub positions: Vec<Length2>,
-    pub predictions: Vec<Length2>,
+    pub positions: Vec<Vec2>,
+    pub predictions: Vec<Vec2>,
     pub densities: Vec<f32>,
-    pub velocities: Vec<Velocity2>,
+    pub velocities: Vec<Vec2>,
     pub lookup: SpacialLookup,
     pub settings: SimSettings,
 }
@@ -120,36 +124,39 @@ impl Scene {
         this
     }
 
-    pub fn absbounds(&self) -> Length2 {
-        self.settings.size / 2.0
+    pub fn absbounds(&self) -> Vec2 {
+        self.settings.size / SCALE / 2.0
     }
 
     pub fn reset(&mut self) {
-        let nx = self.settings.particles.x;
-        let ny = self.settings.particles.y;
+        let nx = self.settings.particles.x as usize;
+        let ny = self.settings.particles.y as usize;
+        let size = self.settings.radius * 2.0;
         let gap = self.settings.gap;
-        let size = self.settings.radius;
 
-        let bbox_size = Length2::of(nx * size + (nx - 1.0) * gap, ny * size + (ny - 1.0) * gap);
-        let tl = Length2::of(
-            (-bbox_size.x / 2.0) + self.settings.radius / 2.0,
-            (bbox_size.y / 2.0) - self.settings.radius / 2.0,
-        );
+        let tl = -0.5
+            * Vec2::new(
+                (size * nx as f32) + (gap * (nx - 1) as f32) - self.settings.radius,
+                (size * ny as f32) + (gap * (ny - 1) as f32) - self.settings.radius,
+            );
 
         self.positions.clear();
         self.densities.clear();
         self.velocities.clear();
 
-        for i in 0..(nx as i32) {
-            for j in 0..(ny as i32) {
-                let offset = Length2::of((size + gap) * i as f32, -(size + gap) * j as f32);
+        for i in 0..nx {
+            for j in 0..ny {
+                let offset = Vec2::new(
+                    size * i as f32 + gap * i as f32,
+                    size * j as f32 + gap * j as f32,
+                );
                 let pos = tl + offset;
 
                 self.positions.push(pos);
             }
         }
 
-        self.velocities = vec![Velocity2::zero(); self.positions.len()];
+        self.velocities = vec![Vec2::ZERO; self.positions.len()];
         self.densities = vec![0.0; self.positions.len()];
         self.lookup.update(&self.positions, self.settings);
     }
@@ -170,20 +177,20 @@ impl Scene {
             (1.0, graphics::Color::from_rgb(239, 74, 12)),
         ]);
 
-        let max_vel = Velocity::new::<pxps>(2500.0);
+        let max_vel = 10.0;
 
         for (i, p) in self.positions.iter().enumerate() {
-            let Length2 { x, y } = *p;
-            let xpx = x.get::<pixel>();
-            let ypx = y.get::<pixel>();
-            let vel = self.velocities[i].mag();
+            let Vec2 { x, y } = *p;
+            let xpx = x * 100.;
+            let ypx = y * 100.;
+            let vel = self.velocities[i].distance(Vec2::ZERO);
             let rel = vel / max_vel;
             let col = g.sample(f32::from(rel).min(1.0));
 
             mesh.circle(
                 graphics::DrawMode::Fill(FillOptions::default()),
                 [xpx, ypx],
-                self.settings.radius.get::<pixel>(),
+                self.settings.radius * 100.,
                 0.1,
                 col,
             )?;
@@ -200,14 +207,14 @@ impl Scene {
 // actual physics
 impl Scene {
     pub fn apply_gravity(&mut self) {
-        let at = self.settings.gravity * self.settings.tick_delay;
-        self.velocities.par_iter_mut().for_each(|v| *v += at);
+        let at = self.settings.gravity * self.settings.dtime;
+        self.velocities.par_iter_mut().for_each(|v| v.y += at);
     }
 
     pub fn update_predictions(&mut self) {
         (0..self.len())
             .into_par_iter()
-            .map(|i| self.positions[i] + self.velocities[i] * self.settings.tick_delay)
+            .map(|i| self.positions[i] + self.velocities[i] * (1. / 120.))
             .collect_into_vec(&mut self.predictions);
     }
 
@@ -230,25 +237,25 @@ impl Scene {
         self.positions
             .par_iter_mut()
             .zip(self.velocities.par_iter())
-            .for_each(|(pos, vel)| *pos += *vel * self.settings.tick_delay);
+            .for_each(|(pos, vel)| *pos += *vel * self.settings.dtime);
     }
 
     pub fn collide(&mut self) {
-        let Length2 { x, y } = self.absbounds();
+        let Vec2 { x, y } = self.absbounds();
 
         self.positions
             .par_iter_mut()
             .zip(self.velocities.par_iter_mut())
             .for_each(|(pos, vel)| {
                 if (pos.y.abs() + self.settings.radius) > y {
-                    let sign = pos.y.get::<meter>().signum();
+                    let sign = pos.y.signum();
 
                     pos.y = y * sign + self.settings.radius * -sign;
                     vel.y *= -self.settings.collision_dampening;
                 }
 
                 if (pos.x.abs() + self.settings.radius) > x {
-                    let sign = pos.x.get::<meter>().signum();
+                    let sign = pos.x.signum();
 
                     pos.x = x * sign + self.settings.radius * -sign;
                     vel.x *= -self.settings.collision_dampening;
@@ -270,9 +277,7 @@ impl Scene {
                 force / self.densities[i]
             })
             .zip(self.velocities.par_iter_mut())
-            .for_each(|(accel, vel)| {
-                *vel += Acceleration2::from_glam::<mps2>(accel) * self.settings.tick_delay
-            });
+            .for_each(|(accel, vel)| *vel += accel * self.settings.dtime);
     }
 
     pub fn update(&mut self) {
@@ -292,30 +297,30 @@ impl Scene {
 impl Scene {
     /// - dist: distance between two particles
     /// - radius: smoothing radius
-    fn smoothing(dist: Length, radius: Length) -> f32 {
+    fn smoothing(dist: f32, radius: f32) -> f32 {
         if dist >= radius {
             return 0.0;
         }
 
-        let volume = (f32::consts::PI * radius.get::<cm>().powi(4)) / 6.0;
-        let diff = radius.get::<cm>() - dist.get::<cm>();
+        let volume = (f32::consts::PI * radius.powi(4)) / 6.0;
+        let diff = radius - dist;
         diff.powi(2) / volume
     }
 
-    fn smoothing_deriv(dist: Length, radius: Length) -> f32 {
-        if dist >= radius || dist == Length::ZERO {
+    fn smoothing_deriv(dist: f32, radius: f32) -> f32 {
+        if dist >= radius || dist == 0.0 {
             return 0.0;
         }
 
-        let scale = 12. / radius.get::<cm>().powi(4) * f32::consts::PI;
-        (dist.get::<cm>() - radius.get::<cm>()) * scale
+        let scale = 12. / radius.powi(4) * f32::consts::PI;
+        (dist - radius) * scale
     }
 
     fn density(
-        positions: &Vec<Length2>,
+        positions: &Vec<Vec2>,
         lookup: &SpacialLookup,
         settings: SimSettings,
-        sample: Length2,
+        sample: Vec2,
     ) -> f32 {
         let raw = rad1(SpacialLookup::pos_to_cell(sample, settings))
             .into_iter()
@@ -323,9 +328,9 @@ impl Scene {
             .flat_map(|key| lookup.get_by_key(key))
             .copied()
             .map(|pidx| {
-                let dist = (positions[pidx] - sample).mag();
+                let dist = (positions[pidx] - sample).distance(Vec2::ZERO);
                 let influence = Self::smoothing(dist, settings.smoothing_radius);
-                settings.mass.get::<kilogram>() * influence
+                settings.mass * influence
             })
             .sum::<f32>();
 
@@ -339,13 +344,13 @@ impl Scene {
     }
 
     fn pressure_force(
-        positions: &Vec<Length2>,
+        positions: &Vec<Vec2>,
         densities: &Vec<f32>,
         lookup: &SpacialLookup,
         settings: SimSettings,
         particle: usize,
-    ) -> GlamVec2 {
-        let mass = settings.mass.get::<kilogram>();
+    ) -> Vec2 {
+        let mass = settings.mass;
         let pdensity = densities[particle];
         let ppressure = Self::density_to_pressure(settings, pdensity);
 
@@ -358,10 +363,10 @@ impl Scene {
             .map(|pidx| {
                 let pos = positions[pidx];
                 let offset = pos - positions[particle];
-                let dist = offset.mag();
+                let dist = offset.distance(Vec2::ZERO);
 
-                let dir = if dist == Length::ZERO {
-                    GlamVec2::new(rand::random::<f32>(), rand::random::<f32>()).normalize()
+                let dir = if dist == 0. {
+                    Vec2::new(rand::random::<f32>(), rand::random::<f32>()).normalize()
                 } else {
                     offset / dist
                 };

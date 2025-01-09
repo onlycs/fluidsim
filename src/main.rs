@@ -9,8 +9,6 @@
 
 #[macro_use]
 extern crate log;
-#[macro_use]
-extern crate uom;
 extern crate futures;
 extern crate ggez;
 extern crate skuld;
@@ -22,7 +20,6 @@ mod logger;
 mod physics;
 mod prelude;
 mod renderer;
-mod vec2;
 
 use error::InitError;
 use ggez::{

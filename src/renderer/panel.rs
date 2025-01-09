@@ -1,28 +1,10 @@
 use crate::prelude::*;
 use num::{NumCast, ToPrimitive};
 use std::ops::{Deref, DerefMut};
-use vec2::Length2;
 
 use super::egui_translator::EguiTranslator;
 use egui::Slider;
 use physics::settings::SimSettings;
-
-fn uom_slider_fn<'a, T: Copy + 'static, K>(
-    it: &'a mut T,
-    new: fn(f32) -> T,
-    get: fn(&T) -> f32,
-) -> impl FnMut(Option<K>) -> K + 'a
-where
-    K: ToPrimitive + NumCast,
-{
-    return move |f| {
-        if let Some(f) = f {
-            *it = new(<f32 as NumCast>::from(f).unwrap());
-        }
-
-        <K as NumCast>::from(get(it)).unwrap()
-    };
-}
 
 pub struct Panel {
     egui: EguiTranslator,
@@ -44,9 +26,9 @@ impl Panel {
     pub fn update_wpos(
         &mut self,
         ctx: &mut ggez::Context,
-    ) -> Result<Option<Length2>, ggez::GameError> {
+    ) -> Result<Option<Vec2>, ggez::GameError> {
         let wpos = match ctx.gfx.window_position() {
-            Ok(ppos) => Length2::new::<pixel>(ppos.x as f32, ppos.y as f32),
+            Ok(ppos) => Vec2::new(ppos.x as f32, ppos.y as f32),
 
             #[cfg(target_os = "linux")]
             Err(_) => {
@@ -62,7 +44,7 @@ impl Panel {
 
                 let (posy, posx) = client.at;
 
-                Length2::new::<pixel>(posx as f32, posy as f32)
+                Vec2::new(posx as f32, posy as f32)
             }
 
             #[cfg(not(target_os = "linux"))]
@@ -85,33 +67,13 @@ impl Panel {
 
         egui::Window::new("Simulation Settings").show(&panel_ctx, |ui| {
             updated |= ui
-                .add(
-                    Slider::from_get_set(
-                        0.5..=10.0,
-                        uom_slider_fn(
-                            &mut self.settings.tick_delay,
-                            Time::new::<ms>,
-                            Time::get::<ms>,
-                        ),
-                    )
-                    .text("Tick Delay (ms)"),
-                )
+                .add(Slider::new(&mut self.settings.fps, 50.0..=255.0).text("TPS"))
                 .changed();
 
             ui.add_space(25.0);
 
             updated |= ui
-                .add(
-                    Slider::from_get_set(
-                        -20.0..=20.0,
-                        uom_slider_fn(
-                            &mut self.settings.gravity.y,
-                            Acceleration::new::<mps2>,
-                            Acceleration::get::<mps2>,
-                        ),
-                    )
-                    .text("Gravity (m/s/s)"),
-                )
+                .add(Slider::new(&mut self.settings.gravity, -20.0..=20.0).text("Gravity"))
                 .changed();
 
             updated |= ui
@@ -125,28 +87,21 @@ impl Panel {
 
             updated |= ui
                 .add(
-                    Slider::from_get_set(
-                        0.01..=4.0,
-                        uom_slider_fn(
-                            &mut self.settings.smoothing_radius,
-                            Length::new::<cm>,
-                            Length::get::<cm>,
-                        ),
-                    )
-                    .text("Smoothing Radius (cm)"),
+                    Slider::new(&mut self.settings.smoothing_radius, 0.01..=4.0)
+                        .text("Smoothing Radius"),
                 )
                 .changed();
 
             updated |= ui
                 .add(
-                    Slider::new(&mut self.settings.target_density, 0.0..=100.0)
+                    Slider::new(&mut self.settings.target_density, 0.0..=50.0)
                         .text("Target Density"),
                 )
                 .changed();
 
             updated |= ui
                 .add(
-                    Slider::new(&mut self.settings.pressure_multiplier, 0.0..=100.0)
+                    Slider::new(&mut self.settings.pressure_multiplier, 0.0..=75.0)
                         .text("Pressure Multiplier"),
                 )
                 .changed();
@@ -170,27 +125,11 @@ impl Panel {
                 .changed();
 
             reset |= ui
-                .add(
-                    Slider::from_get_set(
-                        0.0..=3.0,
-                        uom_slider_fn(&mut self.settings.gap, Length::new::<cm>, Length::get::<cm>),
-                    )
-                    .text("Initial Gap (cm)"),
-                )
+                .add(Slider::new(&mut self.settings.gap, 0.0..=3.0).text("Initial Gap"))
                 .changed();
 
             updated |= ui
-                .add(
-                    Slider::from_get_set(
-                        0.01..=2.0,
-                        uom_slider_fn(
-                            &mut self.settings.radius,
-                            Length::new::<cm>,
-                            Length::get::<cm>,
-                        ),
-                    )
-                    .text("Particle Radius (cm)"),
-                )
+                .add(Slider::new(&mut self.settings.radius, 0.0..=1.0).text("Radius"))
                 .changed();
 
             if self.help {
@@ -214,8 +153,8 @@ impl Panel {
             self.settings.particles.y = 1.0;
         }
 
-        if self.settings.radius.get::<cm>() <= 0.0 {
-            self.settings.radius = Length::new::<cm>(0.01);
+        if self.settings.radius <= 0.0 {
+            self.settings.radius = 0.01;
         }
 
         self.settings.particles.x = self.settings.particles.x.round();
@@ -232,7 +171,7 @@ impl Panel {
         self.egui.update(ctx);
     }
 
-    pub fn set_window(&mut self, size: Length2, pos: Length2) {
+    pub fn set_window(&mut self, size: Vec2, pos: Vec2) {
         self.settings.size = size;
         self.settings.position = pos;
 

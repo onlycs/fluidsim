@@ -29,36 +29,23 @@ impl PhysicsWorkerThread {
             let render = Arc::clone(&render_copy);
 
             let mut pause = true;
-            let mut pause_next = false;
             let mut timer = Instant::now();
+            let mut spt_target = 1. / scene.settings.fps;
 
             'physics: loop {
-                // sleep
-                let el = timer.elapsed();
-                let durpt = Duration::from_secs_f32(scene.settings.tick_delay.get::<second>());
-                let sleep = durpt.saturating_sub(el);
-
-                if !sleep.is_zero() {
-                    task::sleep(sleep).await;
-                } else {
-                    warn!("Physics thread is running behind: {:?}", el - durpt);
-                }
-
-                timer = Instant::now();
-
                 // receive messages
                 while let Ok(msg) = msg.try_recv() {
                     match msg {
                         ToPhysics::Settings(s) => {
+                            spt_target = 1. / s.fps;
                             scene.update_settings(s);
                         }
                         ToPhysics::Pause => {
                             pause = !pause;
-                            pause_next = false;
                         }
                         ToPhysics::Step if pause => {
-                            pause = false;
-                            pause_next = true;
+                            scene.settings.dtime = spt_target;
+                            scene.update();
                         }
                         ToPhysics::Step => {
                             warn!("Received step message while not paused");
@@ -70,13 +57,18 @@ impl PhysicsWorkerThread {
                     }
                 }
 
-                // update scene
-                if pause_next {
-                    scene.update();
+                // sleep
+                let el = timer.elapsed();
+                timer = Instant::now();
 
-                    pause = true;
-                    pause_next = false;
-                } else if !pause {
+                if el.as_secs_f32() < spt_target {
+                    task::sleep(Duration::from_secs_f32(spt_target) - el).await;
+                }
+
+                scene.settings.dtime = spt_target;
+
+                // update scene
+                if !pause {
                     scene.update();
                 }
 
