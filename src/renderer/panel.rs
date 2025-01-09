@@ -1,5 +1,4 @@
 use crate::prelude::*;
-use num::{NumCast, ToPrimitive};
 use std::ops::{Deref, DerefMut};
 
 use super::egui_translator::EguiTranslator;
@@ -101,7 +100,7 @@ impl Panel {
 
             updated |= ui
                 .add(
-                    Slider::new(&mut self.settings.pressure_multiplier, 0.0..=75.0)
+                    Slider::new(&mut self.settings.pressure_multiplier, 0.0..=300.0)
                         .text("Pressure Multiplier"),
                 )
                 .changed();
@@ -134,7 +133,7 @@ impl Panel {
 
             if self.help {
                 ui.add_space(10.0);
-                ui.label("Press space to pause the simulation");
+                ui.label("Press space to pause/play the simulation");
                 ui.label("Press the right arrow to step the simulation");
                 ui.label("Press 'C' to toggle this panel");
                 ui.label("Press 'H' to toggle the help text");

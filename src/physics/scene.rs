@@ -44,8 +44,8 @@ impl SpacialLookup {
     fn cell_key((x, y): (isize, isize), settings: SimSettings) -> usize {
         let px = 17;
         let py = 31;
-        let h =
-            (x * px + y * py).rem_euclid((settings.particles.x * settings.particles.y) as isize);
+        let num_particles = settings.particles.x * settings.particles.y;
+        let h = (x * px + y * py).rem_euclid(num_particles as isize);
 
         h as usize
     }
@@ -61,7 +61,7 @@ impl SpacialLookup {
             .enumerate()
             .collect::<Vec<_>>();
 
-        lookup.sort_by_key(|n| n.1);
+        lookup.sort_by_key(|(_idx, key)| *key);
 
         let keys: Vec<_>;
 
@@ -71,10 +71,6 @@ impl SpacialLookup {
         for (i, key) in keys.iter().enumerate().dedup_by(|(_, a), (_, b)| a == b) {
             self.starts[*key] = i;
         }
-    }
-
-    fn len(&self) -> usize {
-        self.starts.iter().filter(|n| n != &&usize::MAX).count()
     }
 
     fn get_by_key(&self, key: usize) -> &[usize] {
@@ -128,13 +124,14 @@ impl Scene {
         self.settings.size / SCALE / 2.0
     }
 
+    /// organize the particles in a centered grid
     pub fn reset(&mut self) {
         let nx = self.settings.particles.x as usize;
         let ny = self.settings.particles.y as usize;
         let size = self.settings.radius * 2.0;
         let gap = self.settings.gap;
 
-        let tl = -0.5
+        let topleft = -0.5
             * Vec2::new(
                 (size * nx as f32) + (gap * (nx - 1) as f32) - self.settings.radius,
                 (size * ny as f32) + (gap * (ny - 1) as f32) - self.settings.radius,
@@ -150,7 +147,7 @@ impl Scene {
                     size * i as f32 + gap * i as f32,
                     size * j as f32 + gap * j as f32,
                 );
-                let pos = tl + offset;
+                let pos = topleft + offset;
 
                 self.positions.push(pos);
             }
@@ -161,10 +158,12 @@ impl Scene {
         self.lookup.update(&self.positions, self.settings);
     }
 
+    // update the settings of the simulation
     pub fn update_settings(&mut self, settings: SimSettings) {
         self.settings = settings;
     }
 
+    // draw the particles
     pub fn draw(&self, mesh: &mut graphics::MeshBuilder) -> Result<(), ggez::GameError> {
         let g = LinearGradient::new(vec![
             // #1747A2 rgb(23, 71, 162)
@@ -177,20 +176,20 @@ impl Scene {
             (1.0, graphics::Color::from_rgb(239, 74, 12)),
         ]);
 
-        let max_vel = 10.0;
+        let max_vel = 15.0;
 
         for (i, p) in self.positions.iter().enumerate() {
             let Vec2 { x, y } = *p;
-            let xpx = x * 100.;
-            let ypx = y * 100.;
+            let xpx = x * SCALE;
+            let ypx = y * SCALE;
             let vel = self.velocities[i].distance(Vec2::ZERO);
             let rel = vel / max_vel;
-            let col = g.sample(f32::from(rel).min(1.0));
+            let col = g.sample(rel.min(1.0));
 
             mesh.circle(
                 graphics::DrawMode::Fill(FillOptions::default()),
                 [xpx, ypx],
-                self.settings.radius * 100.,
+                self.settings.radius * SCALE,
                 0.1,
                 col,
             )?;
@@ -211,6 +210,7 @@ impl Scene {
         self.velocities.par_iter_mut().for_each(|v| v.y += at);
     }
 
+    // predict with constant lookahead factor (1/120 sec) to make this consistent across fps variations
     pub fn update_predictions(&mut self) {
         (0..self.len())
             .into_par_iter()
@@ -240,6 +240,7 @@ impl Scene {
             .for_each(|(pos, vel)| *pos += *vel * self.settings.dtime);
     }
 
+    // wall collision
     pub fn collide(&mut self) {
         let Vec2 { x, y } = self.absbounds();
 
@@ -302,11 +303,12 @@ impl Scene {
             return 0.0;
         }
 
-        let volume = (f32::consts::PI * radius.powi(4)) / 6.0;
+        let volume = (f32::consts::PI * radius.powi(4)) / 6.0; // calculated by wolfram alpha
         let diff = radius - dist;
         diff.powi(2) / volume
     }
 
+    /// the derivitative of the smoothing function
     fn smoothing_deriv(dist: f32, radius: f32) -> f32 {
         if dist >= radius || dist == 0.0 {
             return 0.0;
@@ -316,33 +318,36 @@ impl Scene {
         (dist - radius) * scale
     }
 
+    /// calculate the density of the scene at a given point
     fn density(
         positions: &Vec<Vec2>,
         lookup: &SpacialLookup,
         settings: SimSettings,
         sample: Vec2,
     ) -> f32 {
-        let raw = rad1(SpacialLookup::pos_to_cell(sample, settings))
+        let raw = rad1(SpacialLookup::pos_to_cell(sample, settings)) // for every point in the smoothing radius
             .into_iter()
             .map(|n| SpacialLookup::cell_key(n, settings))
             .flat_map(|key| lookup.get_by_key(key))
             .copied()
             .map(|pidx| {
-                let dist = (positions[pidx] - sample).distance(Vec2::ZERO);
+                let dist = (positions[pidx] - sample).distance(Vec2::ZERO); // get the distance between the two points
                 let influence = Self::smoothing(dist, settings.smoothing_radius);
-                settings.mass * influence
+                settings.mass * influence // smoothed density (divide by volume in smoothing fn)
             })
             .sum::<f32>();
 
         raw
     }
 
+    /// pressure = density error * pressure multiplier
     fn density_to_pressure(settings: SimSettings, density: f32) -> f32 {
         let err = density - settings.target_density;
         let pressure = err * settings.pressure_multiplier;
         pressure
     }
 
+    /// calculate the repellent force
     fn pressure_force(
         positions: &Vec<Vec2>,
         densities: &Vec<f32>,
@@ -354,7 +359,7 @@ impl Scene {
         let pdensity = densities[particle];
         let ppressure = Self::density_to_pressure(settings, pdensity);
 
-        rad1(SpacialLookup::pos_to_cell(positions[particle], settings))
+        rad1(SpacialLookup::pos_to_cell(positions[particle], settings)) // for every point in the smoothing radius
             .into_iter()
             .map(|n| SpacialLookup::cell_key(n, settings))
             .flat_map(|key| lookup.get_by_key(key))
@@ -371,11 +376,11 @@ impl Scene {
                     offset / dist
                 };
 
-                let slope = Self::smoothing_deriv(dist, settings.smoothing_radius);
-                let pressure = Self::density_to_pressure(settings, densities[pidx]);
-                let pressure_shared = (pressure + ppressure) / 2.0;
+                let slope = Self::smoothing_deriv(dist, settings.smoothing_radius); // calculate the slope of the density
+                let pressure = Self::density_to_pressure(settings, densities[pidx]); // calculate the pressure of that point
+                let pressure_shared = (pressure + ppressure) / 2.0; // newton's third law
 
-                pressure_shared * dir * slope * mass / densities[pidx]
+                pressure_shared * dir * slope * mass / densities[pidx] // calculate the force
             })
             .sum()
     }

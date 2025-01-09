@@ -27,14 +27,14 @@ impl Default for SimSettings {
             dtime: 1.8,
             fps: 120.0,
 
-            gravity: 0.0,
-            collision_dampening: 0.7,
+            gravity: 9.8,
+            collision_dampening: 0.40,
 
-            smoothing_radius: 0.6,
-            target_density: 4.0,
-            pressure_multiplier: 3.9,
+            smoothing_radius: 0.60,
+            target_density: 25.0,
+            pressure_multiplier: 180.0,
 
-            particles: Vec2::new(60., 60.),
+            particles: Vec2::new(70., 70.),
             gap: 0.05,
             radius: 0.05,
 
