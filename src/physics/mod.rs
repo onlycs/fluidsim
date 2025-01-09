@@ -32,7 +32,7 @@ impl PhysicsWorkerThread {
             let mut pause_next = false;
             let mut timer = Instant::now();
 
-            loop {
+            'physics: loop {
                 // sleep
                 let el = timer.elapsed();
                 let durpt = Duration::from_secs_f32(scene.settings.tick_delay.get::<second>());
@@ -65,6 +65,7 @@ impl PhysicsWorkerThread {
                         }
                         ToPhysics::Reset => {
                             scene.reset();
+                            continue 'physics;
                         }
                     }
                 }

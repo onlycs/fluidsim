@@ -16,6 +16,7 @@ extern crate ggez;
 extern crate skuld;
 
 mod error;
+mod gradient;
 mod ipc;
 mod logger;
 mod physics;

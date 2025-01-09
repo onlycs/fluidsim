@@ -139,14 +139,14 @@ impl Panel {
 
             updated |= ui
                 .add(
-                    Slider::new(&mut self.settings.target_density, 0.0..=2.0)
+                    Slider::new(&mut self.settings.target_density, 0.0..=100.0)
                         .text("Target Density"),
                 )
                 .changed();
 
             updated |= ui
                 .add(
-                    Slider::new(&mut self.settings.pressure_multiplier, 0.0..=1.0)
+                    Slider::new(&mut self.settings.pressure_multiplier, 0.0..=100.0)
                         .text("Pressure Multiplier"),
                 )
                 .changed();
@@ -155,7 +155,7 @@ impl Panel {
 
             reset |= ui
                 .add(
-                    Slider::new(&mut self.settings.particles.x, 1.0..=50.0)
+                    Slider::new(&mut self.settings.particles.x, 1.0..=100.0)
                         .integer()
                         .text("Particles X"),
                 )
@@ -163,7 +163,7 @@ impl Panel {
 
             reset |= ui
                 .add(
-                    Slider::new(&mut self.settings.particles.y, 1.0..=50.0)
+                    Slider::new(&mut self.settings.particles.y, 1.0..=100.0)
                         .integer()
                         .text("Particles Y"),
                 )

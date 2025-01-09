@@ -1,7 +1,7 @@
 use core::f32;
 use std::time::Instant;
 
-use crate::prelude::*;
+use crate::{gradient::LinearGradient, prelude::*};
 use ggez::graphics::{self, FillOptions};
 use itertools::Itertools;
 use vec2::{Acceleration2, Length2, Velocity2};
@@ -94,6 +94,7 @@ impl SpacialLookup {
 #[derive(Clone, Debug)]
 pub struct Scene {
     pub positions: Vec<Length2>,
+    pub predictions: Vec<Length2>,
     pub densities: Vec<f32>,
     pub velocities: Vec<Velocity2>,
     pub lookup: SpacialLookup,
@@ -110,6 +111,7 @@ impl Scene {
             positions: Vec::new(),
             densities: Vec::new(),
             velocities: Vec::new(),
+            predictions: Vec::new(),
             lookup: SpacialLookup::default(),
         };
 
@@ -157,17 +159,33 @@ impl Scene {
     }
 
     pub fn draw(&self, mesh: &mut graphics::MeshBuilder) -> Result<(), ggez::GameError> {
-        for p in &self.positions {
+        let g = LinearGradient::new(vec![
+            // #1747A2 rgb(23, 71, 162)
+            (0.062, graphics::Color::from_rgb(23, 71, 162)),
+            // #51FC93 rgb(81, 252, 147)
+            (0.48, graphics::Color::from_rgb(81, 252, 147)),
+            // #FCED06, rgb(252, 237, 6)
+            (0.65, graphics::Color::from_rgb(252, 237, 6)),
+            // #EF4A0C, rgb(239, 74, 12)
+            (1.0, graphics::Color::from_rgb(239, 74, 12)),
+        ]);
+
+        let max_vel = Velocity::new::<pxps>(2500.0);
+
+        for (i, p) in self.positions.iter().enumerate() {
             let Length2 { x, y } = *p;
             let xpx = x.get::<pixel>();
             let ypx = y.get::<pixel>();
+            let vel = self.velocities[i].mag();
+            let rel = vel / max_vel;
+            let col = g.sample(f32::from(rel).min(1.0));
 
             mesh.circle(
                 graphics::DrawMode::Fill(FillOptions::default()),
                 [xpx, ypx],
                 self.settings.radius.get::<pixel>(),
                 0.1,
-                graphics::Color::WHITE,
+                col,
             )?;
         }
 
@@ -186,15 +204,22 @@ impl Scene {
         self.velocities.par_iter_mut().for_each(|v| *v += at);
     }
 
+    pub fn update_predictions(&mut self) {
+        (0..self.len())
+            .into_par_iter()
+            .map(|i| self.positions[i] + self.velocities[i] * self.settings.tick_delay)
+            .collect_into_vec(&mut self.predictions);
+    }
+
     pub fn update_densities(&mut self) {
         (0..self.len())
             .into_par_iter()
             .map(|i| {
                 Self::density(
-                    &self.positions,
+                    &self.predictions,
                     &self.lookup,
                     self.settings,
-                    self.positions[i],
+                    self.predictions[i],
                 )
             })
             .collect_into_vec(&mut self.densities);
@@ -236,7 +261,7 @@ impl Scene {
             .into_par_iter()
             .map(|i| {
                 let force = Self::pressure_force(
-                    &self.positions,
+                    &self.predictions,
                     &self.densities,
                     &self.lookup,
                     self.settings,
@@ -251,8 +276,9 @@ impl Scene {
     }
 
     pub fn update(&mut self) {
-        self.lookup.update(&self.positions, self.settings);
         self.apply_gravity();
+        self.update_predictions();
+        self.lookup.update(&self.predictions, self.settings);
         self.update_densities();
         self.apply_pressure_forces();
         self.update_positions();
