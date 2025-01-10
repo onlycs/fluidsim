@@ -31,12 +31,12 @@ impl Default for SimSettings {
             collision_dampening: 0.40,
 
             smoothing_radius: 0.60,
-            target_density: 25.0,
-            pressure_multiplier: 180.0,
+            target_density: 40.0,
+            pressure_multiplier: 150.0,
 
-            particles: Vec2::new(70., 70.),
+            particles: Vec2::new(80., 80.),
             gap: 0.05,
-            radius: 0.05,
+            radius: 0.025,
 
             // window size and position
             size: Vec2::new(800., 600.),
