@@ -4,9 +4,13 @@ use ggez::{
     event,
     graphics::{self, DrawParam},
     input::keyboard::KeyInput,
-    winit::keyboard::{KeyCode, PhysicalKey},
+    winit::{
+        event::MouseButton,
+        keyboard::{KeyCode, PhysicalKey},
+    },
 };
 use panel::Panel;
+use physics::settings::MouseState;
 
 mod egui_translator;
 mod panel;
@@ -14,6 +18,7 @@ mod panel;
 pub struct State {
     physics: PhysicsWorkerThread,
     panel: Panel,
+    mouse: Option<MouseState>,
 }
 
 impl State {
@@ -21,6 +26,7 @@ impl State {
         Self {
             physics: PhysicsWorkerThread::new(),
             panel: Panel::default(),
+            mouse: None,
         }
     }
 }
@@ -28,6 +34,19 @@ impl State {
 impl event::EventHandler for State {
     fn update(&mut self, ctx: &mut ggez::Context) -> Result<(), ggez::GameError> {
         self.panel.update(ctx);
+
+        let mouse = &ctx.mouse;
+        let left_pressed = mouse.button_pressed(MouseButton::Left);
+        let any_pressed = mouse.button_pressed(MouseButton::Right) || left_pressed;
+        let data = any_pressed.then_some(MouseState {
+            px: mouse.position().into(),
+            is_left: left_pressed,
+        });
+
+        if data != self.mouse {
+            self.mouse = data;
+            ipc::physics_send(ToPhysics::UpdateMouse(data));
+        }
 
         Ok(())
     }
@@ -78,7 +97,6 @@ impl event::EventHandler for State {
         };
 
         let wsize = Vec2::new(width, height);
-
         self.panel.set_window(wsize, wpos);
 
         Ok(())

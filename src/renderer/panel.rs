@@ -64,6 +64,8 @@ impl Panel {
         let mut updated = false;
         let mut reset = false;
 
+        let SimSettings { size, position, .. } = self.settings;
+
         egui::Window::new("Simulation Settings").show(&panel_ctx, |ui| {
             updated |= ui
                 .add(Slider::new(&mut self.settings.fps, 50.0..=255.0).text("TPS"))
@@ -131,6 +133,18 @@ impl Panel {
                 .add(Slider::new(&mut self.settings.radius, 0.0..=1.0).text("Radius"))
                 .changed();
 
+            ui.add_space(25.0);
+
+            if ui.button("Reset Settings").clicked() {
+                reset = true;
+                self.settings = Default::default();
+            }
+
+            if ui.button("Low Density").clicked() {
+                reset = true;
+                self.settings = SimSettings::low_density();
+            }
+
             if self.help {
                 ui.add_space(10.0);
                 ui.label("Press space to pause/play the simulation");
@@ -160,6 +174,8 @@ impl Panel {
         self.settings.particles.y = self.settings.particles.y.round();
 
         if updated || reset {
+            self.settings.position = position;
+            self.settings.size = size;
             ipc::physics_send(ToPhysics::Settings(self.settings));
         }
 
@@ -171,6 +187,10 @@ impl Panel {
     }
 
     pub fn set_window(&mut self, size: Vec2, pos: Vec2) {
+        if self.settings.size == size && self.settings.position == pos {
+            return;
+        }
+
         self.settings.size = size;
         self.settings.position = pos;
 

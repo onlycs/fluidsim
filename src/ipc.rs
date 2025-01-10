@@ -3,37 +3,27 @@ use crate::prelude::*;
 use async_std::channel;
 use async_std::sync::{Arc, Mutex};
 use lazy_static::lazy_static;
-use physics::settings::SimSettings;
+use physics::settings::{MouseState, SimSettings};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ToPhysics {
     Settings(SimSettings),
+    UpdateMouse(Option<MouseState>),
     Reset,
     Pause,
     Step,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum ToRenderer {
-    Kill,
-}
-
 struct UniversalIpc {
-    render_send: Sender<ToRenderer>,
-    render_recv: Option<Receiver<ToRenderer>>,
-
     physics_send: Sender<ToPhysics>,
     physics_recv: Option<Receiver<ToPhysics>>,
 }
 
 impl UniversalIpc {
     fn new() -> Self {
-        let (render_send, render_recv) = channel::unbounded();
         let (physics_send, physics_recv) = channel::unbounded();
 
         Self {
-            render_send,
-            render_recv: Some(render_recv),
             physics_send,
             physics_recv: Some(physics_recv),
         }
@@ -74,5 +64,5 @@ macro_rules! cfg_reciever {
     };
 }
 
-cfg_sender!(render_send: ToRenderer, physics_send: ToPhysics);
-cfg_reciever!(render_recv: ToRenderer, physics_recv: ToPhysics);
+cfg_sender!(physics_send: ToPhysics);
+cfg_reciever!(physics_recv: ToPhysics);

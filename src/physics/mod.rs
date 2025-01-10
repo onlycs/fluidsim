@@ -54,6 +54,9 @@ impl PhysicsWorkerThread {
                             scene.reset();
                             continue 'physics;
                         }
+                        ToPhysics::UpdateMouse(mouse) => {
+                            scene.mouse = mouse;
+                        }
                     }
                 }
 

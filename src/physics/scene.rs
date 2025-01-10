@@ -3,6 +3,7 @@ use core::f32;
 use crate::{gradient::LinearGradient, prelude::*};
 use ggez::graphics::{self, FillOptions};
 use itertools::Itertools;
+use physics::settings::MouseState;
 
 use super::settings::SimSettings;
 use rayon::iter::{
@@ -97,6 +98,7 @@ pub struct Scene {
     pub predictions: Vec<Vec2>,
     pub densities: Vec<f32>,
     pub velocities: Vec<Vec2>,
+    pub mouse: Option<MouseState>,
     pub lookup: SpacialLookup,
     pub settings: SimSettings,
 }
@@ -113,6 +115,7 @@ impl Scene {
             velocities: Vec::new(),
             predictions: Vec::new(),
             lookup: SpacialLookup::default(),
+            mouse: None,
         };
 
         this.reset();
@@ -147,7 +150,13 @@ impl Scene {
                     size * i as f32 + gap * i as f32,
                     size * j as f32 + gap * j as f32,
                 );
-                let pos = topleft + offset;
+
+                let urandom = Vec2::new(
+                    (0.5 - rand::random::<f32>()) / 10.,
+                    (0.5 - rand::random::<f32>()) / 10.,
+                );
+
+                let pos = topleft + offset + urandom;
 
                 self.positions.push(pos);
             }
@@ -203,7 +212,7 @@ impl Scene {
     }
 }
 
-// actual physics
+// global updates
 impl Scene {
     pub fn apply_gravity(&mut self) {
         let at = self.settings.gravity * self.settings.dtime;
@@ -281,8 +290,22 @@ impl Scene {
             .for_each(|(accel, vel)| *vel += accel * self.settings.dtime);
     }
 
+    pub fn apply_interaction_force(&mut self) {
+        let Some(mouse) = self.mouse else {
+            return;
+        };
+
+        self.positions
+            .iter()
+            .zip(self.velocities.iter_mut())
+            .map(|(p, v)| (Self::interaction_force(mouse, *p, *v, self.settings), v))
+            .map(|(f, v)| (v, f / self.settings.mass))
+            .for_each(|(v, a)| *v += a * self.settings.dtime);
+    }
+
     pub fn update(&mut self) {
         self.apply_gravity();
+        self.apply_interaction_force();
         self.update_predictions();
         self.lookup.update(&self.predictions, self.settings);
         self.update_densities();
@@ -292,7 +315,7 @@ impl Scene {
     }
 }
 
-// density and pressure calculations
+// single particle calculations
 // no partial borrowing here is just absurd
 // comon rust do better
 impl Scene {
@@ -383,5 +406,33 @@ impl Scene {
                 pressure_shared * dir * slope * mass / densities[pidx] // calculate the force
             })
             .sum()
+    }
+
+    // thanks mr lague i would have no idea
+    fn interaction_force(
+        mouse: MouseState,
+        position: Vec2,
+        velocity: Vec2,
+        settings: SimSettings,
+    ) -> Vec2 {
+        let mpos = (mouse.px / SCALE) - (settings.size / SCALE / 2.0);
+        let mut force = Vec2::ZERO;
+        let diff = mpos - position;
+        let dist2 = diff.dot(diff);
+
+        if dist2 <= settings.interaction_radius.powi(2) {
+            let dist = dist2.sqrt();
+            let dir = if dist <= f32::EPSILON {
+                Vec2::ZERO
+            } else {
+                diff / dist
+            };
+
+            let center_t = 1. - dist / settings.interaction_radius;
+            force += (dir * settings.interaction_strength * mouse.intensity_factor() - velocity)
+                * center_t;
+        }
+
+        force * mouse.force_factor()
     }
 }
