@@ -1,7 +1,7 @@
 use core::f32;
 
 use crate::{gradient::LinearGradient, prelude::*};
-use ggez::graphics::{self, FillOptions};
+use ggez::graphics::{self, FillOptions, StrokeOptions};
 use itertools::Itertools;
 use physics::settings::MouseState;
 
@@ -27,13 +27,15 @@ fn rad1((x, y): (isize, isize)) -> [(isize, isize); 9] {
     ]
 }
 
+/// Break the scene into a grid for faster lookups
 #[derive(Clone, Debug, Default)]
-pub struct SpacialLookup {
+pub struct SpatialLookup {
     pub lookup: Vec<usize>,
     pub starts: Vec<usize>,
 }
 
-impl SpacialLookup {
+impl SpatialLookup {
+    /// convert a position to a cell coordinate based on the search radius
     fn pos_to_cell(pos: Vec2, settings: SimSettings) -> (isize, isize) {
         let cell_size = settings.smoothing_radius;
         let x = f32::from(pos.x / cell_size).floor();
@@ -42,7 +44,10 @@ impl SpacialLookup {
         (x as isize, y as isize)
     }
 
+    /// "hash" function for a coordinate
     fn cell_key((x, y): (isize, isize), settings: SimSettings) -> usize {
+        // multiply x and y by two primes and add them together. mod by the number of particles so
+        // we can keep the arrays the same length (compute shader friendly)
         let px = 17;
         let py = 31;
         let num_particles = settings.particles.x * settings.particles.y;
@@ -51,7 +56,9 @@ impl SpacialLookup {
         h as usize
     }
 
+    /// update the lookup table based on positions
     fn update(&mut self, positions: &Vec<Vec2>, settings: SimSettings) {
+        // get the key-index pair for a position
         let mut lookup = positions
             .par_iter()
             .map(|pos| {
@@ -62,36 +69,44 @@ impl SpacialLookup {
             .enumerate()
             .collect::<Vec<_>>();
 
+        // sort by the key (this is how we're looking it up)
         lookup.sort_by_key(|(_idx, key)| *key);
 
         let keys: Vec<_>;
-
         (self.lookup, keys) = lookup.into_iter().collect();
         self.starts = vec![usize::MAX; self.lookup.len()];
 
+        // store the starting value of every possible key (usize::MAX is the invalid value)
         for (i, key) in keys.iter().enumerate().dedup_by(|(_, a), (_, b)| a == b) {
             self.starts[*key] = i;
         }
     }
 
+    /// get the indices of all of the particles in a cell
     fn get_by_key(&self, key: usize) -> &[usize] {
+        // get the starting index of the key
         let idx = *self.starts.get(key).unwrap_or(&usize::MAX);
 
+        // if the index is invalid, return an empty slice
         if idx == usize::MAX {
             return &[];
         }
 
+        // find the next valid index
         let end = self.starts[key + 1..].iter().find(|n| n != &&usize::MAX);
         let end = *end.unwrap_or(&self.starts.len());
 
+        // if the end is less than the index, return an empty slice
         if end <= idx {
             return &[];
         }
 
+        // return the slice of the lookup table
         &self.lookup[idx..end]
     }
 }
 
+/// The main scene struct
 #[derive(Clone, Debug)]
 pub struct Scene {
     pub positions: Vec<Vec2>,
@@ -99,7 +114,7 @@ pub struct Scene {
     pub densities: Vec<f32>,
     pub velocities: Vec<Vec2>,
     pub mouse: Option<MouseState>,
-    pub lookup: SpacialLookup,
+    pub lookup: SpatialLookup,
     pub settings: SimSettings,
 }
 
@@ -114,7 +129,7 @@ impl Scene {
             densities: Vec::new(),
             velocities: Vec::new(),
             predictions: Vec::new(),
-            lookup: SpacialLookup::default(),
+            lookup: SpatialLookup::default(),
             mouse: None,
         };
 
@@ -134,16 +149,20 @@ impl Scene {
         let size = self.settings.radius * 2.0;
         let gap = self.settings.gap;
 
+        // calculate the position of the top-left particle
         let topleft = -0.5
             * Vec2::new(
                 (size * nx as f32) + (gap * (nx - 1) as f32) - self.settings.radius,
                 (size * ny as f32) + (gap * (ny - 1) as f32) - self.settings.radius,
             );
 
+        // clear the arrays (reset)
         self.positions.clear();
         self.densities.clear();
         self.velocities.clear();
+        self.predictions.clear();
 
+        // create the particles
         for i in 0..nx {
             for j in 0..ny {
                 let offset = Vec2::new(
@@ -151,6 +170,7 @@ impl Scene {
                     size * j as f32 + gap * j as f32,
                 );
 
+                // add a small random offset to the position because this engine is very deterministic
                 let urandom = Vec2::new(
                     (0.5 - rand::random::<f32>()) / 10.,
                     (0.5 - rand::random::<f32>()) / 10.,
@@ -162,8 +182,11 @@ impl Scene {
             }
         }
 
+        // set the velocities and densities to the correct length
         self.velocities = vec![Vec2::ZERO; self.positions.len()];
         self.densities = vec![0.0; self.positions.len()];
+
+        // update the lookup table
         self.lookup.update(&self.positions, self.settings);
     }
 
@@ -188,9 +211,12 @@ impl Scene {
         let max_vel = 15.0;
 
         for (i, p) in self.positions.iter().enumerate() {
+            // scale each particle back up to the drawing size
             let Vec2 { x, y } = *p;
             let xpx = x * SCALE;
             let ypx = y * SCALE;
+
+            // calculate the color using the velocity
             let vel = self.velocities[i].distance(Vec2::ZERO);
             let rel = vel / max_vel;
             let col = g.sample(rel.min(1.0));
@@ -204,6 +230,20 @@ impl Scene {
             )?;
         }
 
+        // draw the interaction force
+        if let Some(mouse) = self.mouse {
+            let mpos = (mouse.px / SCALE) - (self.settings.size / SCALE / 2.0);
+            let mpos = mpos * SCALE;
+
+            mesh.circle(
+                graphics::DrawMode::Stroke(StrokeOptions::default()),
+                [mpos.x, mpos.y],
+                self.settings.interaction_radius * SCALE,
+                0.1,
+                graphics::Color::from_rgb(255, 255, 255),
+            )?;
+        }
+
         Ok(())
     }
 
@@ -214,12 +254,18 @@ impl Scene {
 
 // global updates
 impl Scene {
-    pub fn apply_gravity(&mut self) {
-        let at = self.settings.gravity * self.settings.dtime;
-        self.velocities.par_iter_mut().for_each(|v| v.y += at);
+    pub fn apply_external_forces(&mut self) {
+        self.positions
+            .par_iter()
+            .zip(self.velocities.par_iter_mut())
+            .for_each(|(pos, vel)| {
+                let accel = Self::external_forces(self.mouse, *pos, *vel, self.settings);
+                *vel += accel * self.settings.dtime;
+            });
     }
 
-    // predict with constant lookahead factor (1/120 sec) to make this consistent across fps variations
+    // use predicted positions rather than actual positions
+    // use a constant lookahead time for consistency across TPS variations
     pub fn update_predictions(&mut self) {
         (0..self.len())
             .into_par_iter()
@@ -227,6 +273,7 @@ impl Scene {
             .collect_into_vec(&mut self.predictions);
     }
 
+    // precache the densities of all of the particles
     pub fn update_densities(&mut self) {
         (0..self.len())
             .into_par_iter()
@@ -241,8 +288,8 @@ impl Scene {
             .collect_into_vec(&mut self.densities);
     }
 
+    // after all the updates, apply the velocities to the positions
     pub fn update_positions(&mut self) {
-        // d = vt
         self.positions
             .par_iter_mut()
             .zip(self.velocities.par_iter())
@@ -273,6 +320,7 @@ impl Scene {
             });
     }
 
+    // make the particles repel
     pub fn apply_pressure_forces(&mut self) {
         (0..self.len())
             .into_par_iter()
@@ -290,22 +338,9 @@ impl Scene {
             .for_each(|(accel, vel)| *vel += accel * self.settings.dtime);
     }
 
-    pub fn apply_interaction_force(&mut self) {
-        let Some(mouse) = self.mouse else {
-            return;
-        };
-
-        self.positions
-            .iter()
-            .zip(self.velocities.iter_mut())
-            .map(|(p, v)| (Self::interaction_force(mouse, *p, *v, self.settings), v))
-            .map(|(f, v)| (v, f / self.settings.mass))
-            .for_each(|(v, a)| *v += a * self.settings.dtime);
-    }
-
+    // global update loop
     pub fn update(&mut self) {
-        self.apply_gravity();
-        self.apply_interaction_force();
+        self.apply_external_forces();
         self.update_predictions();
         self.lookup.update(&self.predictions, self.settings);
         self.update_densities();
@@ -317,7 +352,7 @@ impl Scene {
 
 // single particle calculations
 // no partial borrowing here is just absurd
-// comon rust do better
+// rust, do better
 impl Scene {
     /// - dist: distance between two particles
     /// - radius: smoothing radius
@@ -331,7 +366,7 @@ impl Scene {
         diff.powi(2) / volume
     }
 
-    /// the derivitative of the smoothing function
+    /// the derivative of the smoothing function
     fn smoothing_deriv(dist: f32, radius: f32) -> f32 {
         if dist >= radius || dist == 0.0 {
             return 0.0;
@@ -341,22 +376,23 @@ impl Scene {
         (dist - radius) * scale
     }
 
-    /// calculate the density of the scene at a given point
+    /// calculate the density of the scene at a given point.
+    /// but, give more weight to the particles closer to the sample point
     fn density(
         positions: &Vec<Vec2>,
-        lookup: &SpacialLookup,
+        lookup: &SpatialLookup,
         settings: SimSettings,
         sample: Vec2,
     ) -> f32 {
-        let raw = rad1(SpacialLookup::pos_to_cell(sample, settings)) // for every point in the smoothing radius
+        let raw = rad1(SpatialLookup::pos_to_cell(sample, settings))
             .into_iter()
-            .map(|n| SpacialLookup::cell_key(n, settings))
+            .map(|n| SpatialLookup::cell_key(n, settings))
             .flat_map(|key| lookup.get_by_key(key))
             .copied()
             .map(|pidx| {
                 let dist = (positions[pidx] - sample).distance(Vec2::ZERO); // get the distance between the two points
-                let influence = Self::smoothing(dist, settings.smoothing_radius);
-                settings.mass * influence // smoothed density (divide by volume in smoothing fn)
+                let influence = Self::smoothing(dist, settings.smoothing_radius); // calculate the influence ("weight") of that point
+                settings.mass * influence
             })
             .sum::<f32>();
 
@@ -374,7 +410,7 @@ impl Scene {
     fn pressure_force(
         positions: &Vec<Vec2>,
         densities: &Vec<f32>,
-        lookup: &SpacialLookup,
+        lookup: &SpatialLookup,
         settings: SimSettings,
         particle: usize,
     ) -> Vec2 {
@@ -382,9 +418,10 @@ impl Scene {
         let pdensity = densities[particle];
         let ppressure = Self::density_to_pressure(settings, pdensity);
 
-        rad1(SpacialLookup::pos_to_cell(positions[particle], settings)) // for every point in the smoothing radius
+        // use the spatial lookup to find the particles within the smoothing radius
+        rad1(SpatialLookup::pos_to_cell(positions[particle], settings))
             .into_iter()
-            .map(|n| SpacialLookup::cell_key(n, settings))
+            .map(|n| SpatialLookup::cell_key(n, settings))
             .flat_map(|key| lookup.get_by_key(key))
             .copied()
             .filter(|pidx| pidx != &particle)
@@ -394,6 +431,7 @@ impl Scene {
                 let dist = offset.distance(Vec2::ZERO);
 
                 let dir = if dist == 0. {
+                    // shoot off in a random direction. we don't want to have two particles on top of each other
                     Vec2::new(rand::random::<f32>(), rand::random::<f32>()).normalize()
                 } else {
                     offset / dist
@@ -408,31 +446,37 @@ impl Scene {
             .sum()
     }
 
-    // thanks mr lague i would have no idea
-    fn interaction_force(
-        mouse: MouseState,
+    /// calculate mouse and gravity forces
+    fn external_forces(
+        mouse: Option<MouseState>,
         position: Vec2,
         velocity: Vec2,
         settings: SimSettings,
     ) -> Vec2 {
-        let mpos = (mouse.px / SCALE) - (settings.size / SCALE / 2.0);
-        let mut force = Vec2::ZERO;
-        let diff = mpos - position;
-        let dist2 = diff.dot(diff);
+        let gravity = Vec2::new(0.0, settings.gravity);
 
-        if dist2 <= settings.interaction_radius.powi(2) {
-            let dist = dist2.sqrt();
-            let dir = if dist <= f32::EPSILON {
-                Vec2::ZERO
-            } else {
-                diff / dist
-            };
+        if let Some(mouse) = mouse {
+            let mousepos = mouse.px / SCALE - settings.size / SCALE / 2.0;
+            let offset = mousepos - position;
+            let dist2 = offset.dot(offset);
 
-            let center_t = 1. - dist / settings.interaction_radius;
-            force += (dir * settings.interaction_strength * mouse.intensity_factor() - velocity)
-                * center_t;
+            if dist2 < settings.interaction_radius.powi(2) {
+                let dist = dist2.sqrt();
+                let edge = dist / settings.interaction_radius;
+                let center = 1. - edge;
+                let dir = offset / dist;
+                let strength = settings.interaction_strength * mouse.intensity();
+
+                // reduce gravity when interacting with the mouse. makes interaction feel more natural
+                let gweight = 1. - (center * (strength / 10.).clamp(0., 1.));
+
+                // the closer you are to mouse, the more you are pulled.
+                let accel = gravity * gweight + dir * center * strength;
+
+                return accel - velocity * center;
+            }
         }
 
-        force * mouse.force_factor()
+        gravity
     }
 }

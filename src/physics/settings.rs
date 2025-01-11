@@ -31,19 +31,11 @@ pub struct MouseState {
 }
 
 impl MouseState {
-    pub fn force_factor(&self) -> f32 {
+    pub fn intensity(&self) -> f32 {
         if self.is_left {
             1.0
         } else {
             -1.0
-        }
-    }
-
-    pub fn intensity_factor(&self) -> f32 {
-        if self.is_left {
-            1.0
-        } else {
-            0.85
         }
     }
 }
@@ -53,6 +45,7 @@ impl SimSettings {
         Self {
             target_density: 25.0,
             pressure_multiplier: 190.0,
+            particles: Vec2::new(65., 65.),
             ..Default::default()
         }
     }
@@ -73,10 +66,10 @@ impl Default for SimSettings {
 
             particles: Vec2::new(80., 80.),
             gap: 0.1,
-            radius: 0.025,
+            radius: 0.035,
 
-            interaction_radius: 5.0,
-            interaction_strength: 50.0,
+            interaction_radius: 4.0,
+            interaction_strength: 90.0,
 
             // window size and position
             size: Vec2::new(800., 600.),

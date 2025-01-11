@@ -50,19 +50,19 @@ macro_rules! cfg_sender {
     };
 }
 
-macro_rules! cfg_reciever {
-    ($reciever:ident: $ty:ty) => {
-        pub fn $reciever() -> Receiver<$ty> {
+macro_rules! cfg_receiver {
+    ($receiver:ident: $ty:ty) => {
+        pub fn $receiver() -> Receiver<$ty> {
             task::block_on(async move {
-                IPC.lock().await.$reciever.take().unwrap()
+                IPC.lock().await.$receiver.take().unwrap()
             })
         }
     };
 
     ($($sender:ident: $ty:ty),+) => {
-        $(cfg_reciever!($sender: $ty);)+
+        $(cfg_receiver!($sender: $ty);)+
     };
 }
 
 cfg_sender!(physics_send: ToPhysics);
-cfg_reciever!(physics_recv: ToPhysics);
+cfg_receiver!(physics_recv: ToPhysics);

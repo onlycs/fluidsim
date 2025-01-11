@@ -95,7 +95,7 @@ impl Panel {
 
             updated |= ui
                 .add(
-                    Slider::new(&mut self.settings.target_density, 0.0..=50.0)
+                    Slider::new(&mut self.settings.target_density, 0.0..=200.0)
                         .text("Target Density"),
                 )
                 .changed();

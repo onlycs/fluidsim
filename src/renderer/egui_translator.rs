@@ -332,7 +332,6 @@ impl EguiTranslator {
                         for px in &col.pixels {
                             pixels.extend(px.to_array());
                         }
-
                         graphics::Image::from_pixels(
                             ctx,
                             pixels.as_slice(),
