@@ -32,12 +32,13 @@ impl State {
 }
 
 impl event::EventHandler for State {
+    /// Update the panel (mouse/keyboard) as well as sending good mouse data
     fn update(&mut self, ctx: &mut ggez::Context) -> Result<(), ggez::GameError> {
-        self.panel.update(ctx);
+        let propagate = !self.panel.update(ctx);
 
         let mouse = &ctx.mouse;
-        let left_pressed = mouse.button_pressed(MouseButton::Left);
-        let any_pressed = mouse.button_pressed(MouseButton::Right) || left_pressed;
+        let left_pressed = mouse.button_pressed(MouseButton::Left) && propagate;
+        let any_pressed = (mouse.button_pressed(MouseButton::Right) || left_pressed) && propagate;
         let data = any_pressed.then_some(MouseState {
             px: mouse.position().into(),
             is_left: left_pressed,

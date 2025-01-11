@@ -53,9 +53,10 @@ impl Panel {
         Ok(Some(wpos))
     }
 
-    pub fn update(&mut self, ctx: &mut ggez::Context) {
+    /// Updates the panel. Returns if we should stop propagation of mouse clicks, etc.
+    pub fn update(&mut self, ctx: &mut ggez::Context) -> bool {
         let Ok(Some(wpos)) = self.update_wpos(ctx) else {
-            return;
+            return false;
         };
 
         self.set_window(self.settings.size, wpos);
@@ -66,93 +67,97 @@ impl Panel {
 
         let SimSettings { size, position, .. } = self.settings;
 
-        egui::Window::new("Simulation Settings").show(&panel_ctx, |ui| {
-            updated |= ui
-                .add(Slider::new(&mut self.settings.fps, 50.0..=255.0).text("TPS"))
-                .changed();
+        let hovered = egui::Window::new("Simulation Settings")
+            .show(&panel_ctx, |ui| {
+                updated |= ui
+                    .add(Slider::new(&mut self.settings.fps, 50.0..=255.0).text("TPS"))
+                    .changed();
 
-            ui.add_space(25.0);
+                ui.add_space(25.0);
 
-            updated |= ui
-                .add(Slider::new(&mut self.settings.gravity, -20.0..=20.0).text("Gravity"))
-                .changed();
+                updated |= ui
+                    .add(Slider::new(&mut self.settings.gravity, -20.0..=20.0).text("Gravity"))
+                    .changed();
 
-            updated |= ui
-                .add(
-                    Slider::new(&mut self.settings.collision_dampening, 0.0..=1.0)
-                        .text("Collision Dampening"),
-                )
-                .changed();
+                updated |= ui
+                    .add(
+                        Slider::new(&mut self.settings.collision_dampening, 0.0..=1.0)
+                            .text("Collision Dampening"),
+                    )
+                    .changed();
 
-            ui.add_space(25.0);
+                ui.add_space(25.0);
 
-            updated |= ui
-                .add(
-                    Slider::new(&mut self.settings.smoothing_radius, 0.01..=4.0)
-                        .text("Smoothing Radius"),
-                )
-                .changed();
+                updated |= ui
+                    .add(
+                        Slider::new(&mut self.settings.smoothing_radius, 0.01..=4.0)
+                            .text("Smoothing Radius"),
+                    )
+                    .changed();
 
-            updated |= ui
-                .add(
-                    Slider::new(&mut self.settings.target_density, 0.0..=200.0)
-                        .text("Target Density"),
-                )
-                .changed();
+                updated |= ui
+                    .add(
+                        Slider::new(&mut self.settings.target_density, 0.0..=200.0)
+                            .text("Target Density"),
+                    )
+                    .changed();
 
-            updated |= ui
-                .add(
-                    Slider::new(&mut self.settings.pressure_multiplier, 0.0..=300.0)
-                        .text("Pressure Multiplier"),
-                )
-                .changed();
+                updated |= ui
+                    .add(
+                        Slider::new(&mut self.settings.pressure_multiplier, 0.0..=300.0)
+                            .text("Pressure Multiplier"),
+                    )
+                    .changed();
 
-            ui.add_space(25.0);
+                ui.add_space(25.0);
 
-            reset |= ui
-                .add(
-                    Slider::new(&mut self.settings.particles.x, 1.0..=100.0)
-                        .integer()
-                        .text("Particles X"),
-                )
-                .changed();
+                reset |= ui
+                    .add(
+                        Slider::new(&mut self.settings.particles.x, 1.0..=100.0)
+                            .integer()
+                            .text("Particles X"),
+                    )
+                    .changed();
 
-            reset |= ui
-                .add(
-                    Slider::new(&mut self.settings.particles.y, 1.0..=100.0)
-                        .integer()
-                        .text("Particles Y"),
-                )
-                .changed();
+                reset |= ui
+                    .add(
+                        Slider::new(&mut self.settings.particles.y, 1.0..=100.0)
+                            .integer()
+                            .text("Particles Y"),
+                    )
+                    .changed();
 
-            reset |= ui
-                .add(Slider::new(&mut self.settings.gap, 0.0..=3.0).text("Initial Gap"))
-                .changed();
+                reset |= ui
+                    .add(Slider::new(&mut self.settings.gap, 0.0..=3.0).text("Initial Gap"))
+                    .changed();
 
-            updated |= ui
-                .add(Slider::new(&mut self.settings.radius, 0.0..=1.0).text("Radius"))
-                .changed();
+                updated |= ui
+                    .add(Slider::new(&mut self.settings.radius, 0.0..=1.0).text("Radius"))
+                    .changed();
 
-            ui.add_space(25.0);
+                ui.add_space(25.0);
 
-            if ui.button("Reset Settings").clicked() {
-                reset = true;
-                self.settings = Default::default();
-            }
+                if ui.button("Reset Settings").clicked() {
+                    reset = true;
+                    self.settings = Default::default();
+                }
 
-            if ui.button("Low Density").clicked() {
-                reset = true;
-                self.settings = SimSettings::low_density();
-            }
+                if ui.button("Low Density").clicked() {
+                    reset = true;
+                    self.settings = SimSettings::low_density();
+                }
 
-            if self.help {
-                ui.add_space(10.0);
-                ui.label("Press space to pause/play the simulation");
-                ui.label("Press the right arrow to step the simulation");
-                ui.label("Press 'C' to toggle this panel");
-                ui.label("Press 'H' to toggle the help text");
-            }
-        });
+                if self.help {
+                    ui.add_space(10.0);
+                    ui.label("Press space to pause/play the simulation");
+                    ui.label("Press the right arrow to step the simulation");
+                    ui.label("Press 'C' to toggle this panel");
+                    ui.label("Press 'H' to toggle the help text");
+                }
+            })
+            .unwrap()
+            .response
+            .hovered();
 
         // borrowing panel as mut
         drop(panel_ctx);
@@ -184,6 +189,8 @@ impl Panel {
         }
 
         self.egui.update(ctx);
+
+        hovered
     }
 
     pub fn set_window(&mut self, size: Vec2, pos: Vec2) {

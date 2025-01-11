@@ -32,6 +32,7 @@ fn main() -> Result<(), InitError> {
     logger::init();
     info!("Starting up");
 
+    // give us a window
     let (ctx, event_loop) = ContextBuilder::new("fluidsim", "angad")
         .window_setup(
             WindowSetup::default()
@@ -46,6 +47,7 @@ fn main() -> Result<(), InitError> {
         )
         .build()?;
 
+    // run our window
     event::run(ctx, event_loop, State::new())?;
 
     Ok(())
