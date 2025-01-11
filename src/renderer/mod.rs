@@ -127,6 +127,7 @@ impl event::EventHandler for State {
             }
             KeyCode::KeyQ if input.mods.control_key() => {
                 info!("Got ctrl+q, quitting!");
+                ipc::physics_send(ToPhysics::Kill);
                 ctx.request_quit();
             }
             _ => (),

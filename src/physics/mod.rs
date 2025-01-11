@@ -5,10 +5,7 @@ pub mod settings;
 use crate::prelude::*;
 use async_std::sync::{Arc, Mutex};
 use physics::prelude::*;
-use std::{
-    future::Future,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 pub struct PhysicsWorkerThread {
     render: Arc<Mutex<Scene>>,
@@ -41,6 +38,7 @@ impl PhysicsWorkerThread {
                             scene.update_settings(s);
                         }
                         ToPhysics::Pause => {
+                            info!("Toggling pause");
                             pause = !pause;
                         }
                         ToPhysics::Step if pause => {
@@ -51,11 +49,16 @@ impl PhysicsWorkerThread {
                             warn!("Received step message while not paused");
                         }
                         ToPhysics::Reset => {
+                            info!("Resetting scene");
                             scene.reset();
                             continue 'physics;
                         }
                         ToPhysics::UpdateMouse(mouse) => {
                             scene.mouse = mouse;
+                        }
+                        ToPhysics::Kill => {
+                            info!("Physics thread killed");
+                            break 'physics;
                         }
                     }
                 }
@@ -95,9 +98,5 @@ impl PhysicsWorkerThread {
         }
 
         &self.saved
-    }
-
-    pub async fn kill(self) -> impl Future<Output = Option<()>> {
-        self.thread.cancel()
     }
 }

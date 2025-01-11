@@ -2,8 +2,10 @@ use crate::prelude::*;
 use std::ops::{Deref, DerefMut};
 
 use super::egui_translator::EguiTranslator;
-use egui::Slider;
+use egui::{Button, RichText, Slider};
 use physics::settings::SimSettings;
+
+const TEXT_SIZE: f32 = 16.0;
 
 pub struct Panel {
     egui: EguiTranslator,
@@ -67,13 +69,16 @@ impl Panel {
 
         let SimSettings { size, position, .. } = self.settings;
 
-        let hovered = egui::Window::new("Simulation Settings")
+        let res = egui::Window::new("Simulation Settings")
             .show(&panel_ctx, |ui| {
+                ui.label(RichText::new("GFX Settings").size(TEXT_SIZE).strong());
+
                 updated |= ui
                     .add(Slider::new(&mut self.settings.fps, 50.0..=255.0).text("TPS"))
                     .changed();
 
                 ui.add_space(25.0);
+                ui.label(RichText::new("Physics Settings").size(TEXT_SIZE).strong());
 
                 updated |= ui
                     .add(Slider::new(&mut self.settings.gravity, -20.0..=20.0).text("Gravity"))
@@ -87,6 +92,7 @@ impl Panel {
                     .changed();
 
                 ui.add_space(25.0);
+                ui.label(RichText::new("SPH Settings").size(TEXT_SIZE).strong());
 
                 updated |= ui
                     .add(
@@ -109,7 +115,32 @@ impl Panel {
                     )
                     .changed();
 
+                updated |= ui
+                    .add(
+                        Slider::new(&mut self.settings.viscosity_strength, 0.0..=1.0)
+                            .text("Viscosity Strength"),
+                    )
+                    .changed();
+
                 ui.add_space(25.0);
+                ui.label(RichText::new("Mouse Settings").size(TEXT_SIZE).strong());
+
+                updated |= ui
+                    .add(
+                        Slider::new(&mut self.settings.interaction_radius, 0.0..=10.0)
+                            .text("Interaction Radius"),
+                    )
+                    .changed();
+
+                updated |= ui
+                    .add(
+                        Slider::new(&mut self.settings.interaction_strength, 0.0..=100.0)
+                            .text("Interaction Strength"),
+                    )
+                    .changed();
+
+                ui.add_space(25.0);
+                ui.label(RichText::new("Initial Conditions").size(TEXT_SIZE).strong());
 
                 reset |= ui
                     .add(
@@ -136,13 +167,20 @@ impl Panel {
                     .changed();
 
                 ui.add_space(25.0);
+                ui.label(RichText::new("Presets").size(TEXT_SIZE).strong());
 
-                if ui.button("Reset Settings").clicked() {
+                if ui
+                    .add_sized([180., 30.], Button::new("Default Settings"))
+                    .clicked()
+                {
                     reset = true;
                     self.settings = Default::default();
                 }
 
-                if ui.button("Low Density").clicked() {
+                if ui
+                    .add_sized([180., 30.], Button::new("Low Density"))
+                    .clicked()
+                {
                     reset = true;
                     self.settings = SimSettings::low_density();
                 }
@@ -156,8 +194,7 @@ impl Panel {
                 }
             })
             .unwrap()
-            .response
-            .hovered();
+            .response;
 
         // borrowing panel as mut
         drop(panel_ctx);
@@ -190,7 +227,7 @@ impl Panel {
 
         self.egui.update(ctx);
 
-        hovered
+        res.contains_pointer()
     }
 
     pub fn set_window(&mut self, size: Vec2, pos: Vec2) {

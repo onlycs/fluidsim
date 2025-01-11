@@ -338,6 +338,24 @@ impl Scene {
             .for_each(|(accel, vel)| *vel += accel * self.settings.dtime);
     }
 
+    // make the particles resist flow
+    pub fn apply_viscosity(&mut self) {
+        self.velocities = (0..self.len())
+            .into_par_iter()
+            .map(|i| {
+                let accel = Self::viscosity(
+                    &self.predictions,
+                    &self.velocities,
+                    &self.lookup,
+                    self.settings,
+                    i,
+                );
+
+                self.velocities[i] + accel * self.settings.dtime
+            })
+            .collect();
+    }
+
     // global update loop
     pub fn update(&mut self) {
         self.apply_external_forces();
@@ -345,6 +363,7 @@ impl Scene {
         self.lookup.update(&self.predictions, self.settings);
         self.update_densities();
         self.apply_pressure_forces();
+        self.apply_viscosity();
         self.update_positions();
         self.collide();
     }
@@ -364,6 +383,17 @@ impl Scene {
         let volume = (f32::consts::PI * radius.powi(4)) / 6.0; // calculated by wolfram alpha
         let diff = radius - dist;
         diff.powi(2) / volume
+    }
+
+    /// smoothing for viscosity. Smooth near the center
+    fn viscosity_smoothing(dist: f32, radius: f32) -> f32 {
+        if dist >= radius {
+            return 0.0;
+        }
+
+        let volume = (f32::consts::PI * radius.powi(8)) / 4.0; // calculated by wolfram alpha
+        let diff2 = radius.powi(2) - dist.powi(2);
+        diff2.powi(3) / volume
     }
 
     /// the derivative of the smoothing function
@@ -478,5 +508,34 @@ impl Scene {
         }
 
         gravity
+    }
+
+    /// calculate the viscosity force
+    fn viscosity(
+        positions: &Vec<Vec2>,
+        velocities: &Vec<Vec2>,
+        lookup: &SpatialLookup,
+        settings: SimSettings,
+        particle: usize,
+    ) -> Vec2 {
+        let mut force = Vec2::ZERO;
+
+        let pos = positions[particle];
+        let neighbors = rad1(SpatialLookup::pos_to_cell(pos, settings))
+            .into_iter()
+            .map(|n| SpatialLookup::cell_key(n, settings))
+            .flat_map(|key| lookup.get_by_key(key))
+            .copied()
+            .filter(|pidx| pidx != &particle);
+
+        for pidx in neighbors {
+            let other_pos = positions[pidx];
+            let dist = pos.distance(other_pos);
+            let influence = Self::viscosity_smoothing(dist, settings.smoothing_radius);
+
+            force += (velocities[pidx] - velocities[particle]) * influence;
+        }
+
+        force * settings.viscosity_strength
     }
 }

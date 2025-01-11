@@ -12,6 +12,7 @@ pub enum ToPhysics {
     Reset,
     Pause,
     Step,
+    Kill,
 }
 
 struct UniversalIpc {

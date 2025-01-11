@@ -16,6 +16,8 @@ pub struct SimSettings {
     pub interaction_radius: f32,
     pub interaction_strength: f32,
 
+    pub viscosity_strength: f32,
+
     pub particles: Vec2,
     pub gap: f32,
     pub radius: f32,
@@ -61,11 +63,12 @@ impl Default for SimSettings {
             collision_dampening: 0.40,
 
             smoothing_radius: 0.60,
-            target_density: 40.0,
+            target_density: 35.0,
             pressure_multiplier: 150.0,
+            viscosity_strength: 0.06,
 
             particles: Vec2::new(80., 80.),
-            gap: 0.1,
+            gap: 0.05,
             radius: 0.035,
 
             interaction_radius: 4.0,
