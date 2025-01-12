@@ -3,8 +3,13 @@
 use std::{
     collections::{HashMap, LinkedList},
     ops::Deref,
-    time::Instant,
 };
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Instant;
+
+#[cfg(target_arch = "wasm32")]
+use web_time::Instant;
 
 use egui::*;
 use epaint::Primitive;
@@ -14,13 +19,19 @@ use ggez::{
         self, BlendComponent, BlendFactor, BlendMode, BlendOperation, Canvas, DrawParam, Drawable,
         GraphicsContext, ImageFormat,
     },
-    input::keyboard,
     mint::Point2,
-    winit::{
-        event::MouseButton,
-        keyboard::{KeyCode, ModifiersState, PhysicalKey},
-    },
+    winit::event::MouseButton,
 };
+
+#[cfg(not(target_arch = "wasm32"))]
+use ggez::{
+    input::keyboard,
+    winit::keyboard::{KeyCode, ModifiersState, PhysicalKey},
+};
+
+#[cfg(target_arch = "wasm32")]
+use ggez::input::keyboard::{KeyCode, KeyMods};
+
 use itertools::Itertools;
 
 pub struct PaintJob {
@@ -80,52 +91,99 @@ impl Input {
     }
 
     fn update(&mut self, ctx: &mut ggez::Context) {
-        let ggez_mods = ctx.keyboard.active_modifiers;
-        let egui_mods = Modifiers {
-            alt: ggez_mods.intersects(ModifiersState::ALT),
-            ctrl: ggez_mods.intersects(ModifiersState::CONTROL),
-            shift: ggez_mods.intersects(ModifiersState::SHIFT),
-            mac_cmd: cfg!(target_os = "macos") && ggez_mods.intersects(ModifiersState::SUPER),
-            command: if cfg!(target_os = "macos") {
-                ggez_mods.intersects(ModifiersState::SUPER)
-            } else {
-                ggez_mods.intersects(ModifiersState::CONTROL)
-            },
+        let egui_mods;
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let ggez_mods = ctx.keyboard.active_modifiers;
+            egui_mods = Modifiers {
+                alt: ggez_mods.intersects(ModifiersState::ALT),
+                ctrl: ggez_mods.intersects(ModifiersState::CONTROL),
+                shift: ggez_mods.intersects(ModifiersState::SHIFT),
+                mac_cmd: cfg!(target_os = "macos") && ggez_mods.intersects(ModifiersState::SUPER),
+                command: if cfg!(target_os = "macos") {
+                    ggez_mods.intersects(ModifiersState::SUPER)
+                } else {
+                    ggez_mods.intersects(ModifiersState::CONTROL)
+                },
+            };
+
+            for key in &ctx.keyboard.pressed_physical_keys {
+                let PhysicalKey::Code(kc) = key else {
+                    continue;
+                };
+
+                let Some(egui_key) = translate_key(kc) else {
+                    continue;
+                };
+
+                if ctx.keyboard.is_physical_key_just_pressed(&key) || ctx.keyboard.is_key_repeated()
+                {
+                    self.raw.events.push(Event::Key {
+                        key: egui_key,
+                        physical_key: None,
+                        pressed: true,
+                        repeat: ctx.keyboard.is_key_repeated(),
+                        modifiers: egui_mods,
+                    });
+                }
+
+                self.raw.events.push(Event::Text(
+                    ctx.keyboard
+                        .pressed_logical_keys
+                        .iter()
+                        .filter(|k| {
+                            (ctx.keyboard.is_logical_key_just_pressed(k))
+                                && ctx.keyboard.active_modifiers.is_empty()
+                        })
+                        .filter_map(|k| match k {
+                            keyboard::Key::Character(ch) => Some(ch.as_str()),
+                            _ => None,
+                        })
+                        .collect(),
+                ));
+            }
         };
 
-        for key in &ctx.keyboard.pressed_physical_keys {
-            let PhysicalKey::Code(kc) = key else {
-                continue;
+        #[cfg(target_arch = "wasm32")]
+        {
+            let ggez_mods = ctx.keyboard.active_mods();
+            egui_mods = Modifiers {
+                alt: ggez_mods.intersects(KeyMods::ALT),
+                ctrl: ggez_mods.intersects(KeyMods::CTRL),
+                shift: ggez_mods.intersects(KeyMods::SHIFT),
+                mac_cmd: false,
+                command: false,
             };
 
-            let Some(egui_key) = translate_key(kc) else {
-                continue;
-            };
+            for key in ctx.keyboard.pressed_keys() {
+                let Some(egui_key) = translate_key(key) else {
+                    continue;
+                };
 
-            if ctx.keyboard.is_physical_key_just_pressed(&key) || ctx.keyboard.is_key_repeated() {
-                self.raw.events.push(Event::Key {
-                    key: egui_key,
-                    physical_key: None,
-                    pressed: true,
-                    repeat: ctx.keyboard.is_key_repeated(),
-                    modifiers: egui_mods,
-                });
+                if ctx.keyboard.is_key_just_pressed(*key) || ctx.keyboard.is_key_repeated() {
+                    self.raw.events.push(Event::Key {
+                        key: egui_key,
+                        physical_key: None,
+                        pressed: true,
+                        repeat: ctx.keyboard.is_key_repeated(),
+                        modifiers: egui_mods,
+                    });
+                }
+
+                self.raw.events.push(Event::Text(
+                    ctx.keyboard
+                        .pressed_keys()
+                        .iter()
+                        .filter(|k| {
+                            (ctx.keyboard.is_key_just_pressed(**k))
+                                && ctx.keyboard.active_mods().is_empty()
+                        })
+                        .filter_map(|k| translate_key(k))
+                        .map(|c| c.symbol_or_name())
+                        .collect(),
+                ));
             }
-
-            self.raw.events.push(Event::Text(
-                ctx.keyboard
-                    .pressed_logical_keys
-                    .iter()
-                    .filter(|k| {
-                        (ctx.keyboard.is_logical_key_just_pressed(k))
-                            && ctx.keyboard.active_modifiers.is_empty()
-                    })
-                    .filter_map(|k| match k {
-                        keyboard::Key::Character(ch) => Some(ch.as_str()),
-                        _ => None,
-                    })
-                    .collect(),
-            ));
         }
 
         let Point2 { x, y } = ctx.mouse.position();
@@ -164,6 +222,7 @@ impl Input {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn translate_key(kc: &KeyCode) -> Option<Key> {
     Some(match kc {
         // Letter keys
@@ -262,6 +321,125 @@ fn translate_key(kc: &KeyCode) -> Option<Key> {
         KeyCode::ArrowUp => Key::ArrowUp,
         KeyCode::ArrowRight => Key::ArrowRight,
         KeyCode::ArrowDown => Key::ArrowDown,
+        KeyCode::PageDown => Key::PageDown,
+        KeyCode::PageUp => Key::PageUp,
+
+        // Numpad keys
+        KeyCode::Numpad0 => Key::Num0,
+        KeyCode::Numpad1 => Key::Num1,
+        KeyCode::Numpad2 => Key::Num2,
+        KeyCode::Numpad3 => Key::Num3,
+        KeyCode::Numpad4 => Key::Num4,
+        KeyCode::Numpad5 => Key::Num5,
+        KeyCode::Numpad6 => Key::Num6,
+        KeyCode::Numpad7 => Key::Num7,
+        KeyCode::Numpad8 => Key::Num8,
+        KeyCode::Numpad9 => Key::Num9,
+
+        // Close enough
+        _ => return None,
+    })
+}
+
+#[cfg(target_arch = "wasm32")]
+fn translate_key(kc: &KeyCode) -> Option<Key> {
+    Some(match kc {
+        // Letter keys
+        KeyCode::A => Key::A,
+        KeyCode::B => Key::B,
+        KeyCode::C => Key::C,
+        KeyCode::D => Key::D,
+        KeyCode::E => Key::E,
+        KeyCode::F => Key::F,
+        KeyCode::G => Key::G,
+        KeyCode::H => Key::H,
+        KeyCode::I => Key::I,
+        KeyCode::J => Key::J,
+        KeyCode::K => Key::K,
+        KeyCode::L => Key::L,
+        KeyCode::M => Key::M,
+        KeyCode::N => Key::N,
+        KeyCode::O => Key::O,
+        KeyCode::P => Key::P,
+        KeyCode::Q => Key::Q,
+        KeyCode::R => Key::R,
+        KeyCode::S => Key::S,
+        KeyCode::T => Key::T,
+        KeyCode::U => Key::U,
+        KeyCode::V => Key::V,
+        KeyCode::W => Key::W,
+        KeyCode::X => Key::X,
+        KeyCode::Y => Key::Y,
+        KeyCode::Z => Key::Z,
+
+        // Punctuation et. al
+        KeyCode::LBracket => Key::OpenBracket,
+        KeyCode::RBracket => Key::CloseBracket,
+        KeyCode::Backslash => Key::Backslash,
+        KeyCode::Semicolon => Key::Semicolon,
+        KeyCode::Apostrophe => Key::Quote,
+        KeyCode::Comma => Key::Comma,
+        KeyCode::Period => Key::Period,
+        KeyCode::Slash => Key::Slash,
+        KeyCode::Space => Key::Space,
+
+        // Function Row
+        KeyCode::Escape => Key::Escape,
+        KeyCode::F1 => Key::F1,
+        KeyCode::F2 => Key::F2,
+        KeyCode::F3 => Key::F3,
+        KeyCode::F4 => Key::F4,
+        KeyCode::F5 => Key::F5,
+        KeyCode::F6 => Key::F6,
+        KeyCode::F7 => Key::F7,
+        KeyCode::F8 => Key::F8,
+        KeyCode::F9 => Key::F9,
+        KeyCode::F10 => Key::F10,
+        KeyCode::F11 => Key::F11,
+        KeyCode::F12 => Key::F12,
+        KeyCode::F13 => Key::F13,
+        KeyCode::F14 => Key::F14,
+        KeyCode::F15 => Key::F15,
+        KeyCode::F16 => Key::F16,
+        KeyCode::F17 => Key::F17,
+        KeyCode::F18 => Key::F18,
+        KeyCode::F19 => Key::F19,
+        KeyCode::F20 => Key::F20,
+        KeyCode::F21 => Key::F21,
+        KeyCode::F22 => Key::F22,
+        KeyCode::F23 => Key::F23,
+        KeyCode::F24 => Key::F24,
+
+        // Numeral Row
+        KeyCode::Grave => Key::Backtick,
+        KeyCode::Key1 => Key::Num1,
+        KeyCode::Key2 => Key::Num2,
+        KeyCode::Key3 => Key::Num3,
+        KeyCode::Key4 => Key::Num4,
+        KeyCode::Key5 => Key::Num5,
+        KeyCode::Key6 => Key::Num6,
+        KeyCode::Key7 => Key::Num7,
+        KeyCode::Key8 => Key::Num8,
+        KeyCode::Key9 => Key::Num9,
+        KeyCode::Key0 => Key::Num0,
+
+        // Numeral Row Math
+        KeyCode::Minus => Key::Minus,
+        KeyCode::Equals => Key::Equals,
+
+        // Text Input Control
+        KeyCode::Back => Key::Backspace,
+        KeyCode::Insert => Key::Insert,
+        KeyCode::Home => Key::Home,
+        KeyCode::Delete => Key::Delete,
+        KeyCode::End => Key::End,
+        KeyCode::Return => Key::Enter,
+
+        // Arrow Keys et. al
+        KeyCode::Left => Key::ArrowLeft,
+        KeyCode::Up => Key::ArrowUp,
+        KeyCode::Right => Key::ArrowRight,
+        KeyCode::Down => Key::ArrowDown,
         KeyCode::PageDown => Key::PageDown,
         KeyCode::PageUp => Key::PageUp,
 

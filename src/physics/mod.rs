@@ -1,11 +1,15 @@
-pub mod prelude;
 pub mod scene;
 pub mod settings;
 
 use crate::prelude::*;
 use async_std::sync::{Arc, Mutex};
-use physics::prelude::*;
-use std::time::{Duration, Instant};
+use scene::Scene;
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Instant;
+
+#[cfg(target_arch = "wasm32")]
+use web_time::Instant;
 
 pub struct PhysicsWorkerThread {
     render: Arc<Mutex<Scene>>,
@@ -18,8 +22,7 @@ impl PhysicsWorkerThread {
         let scene = Scene::new();
         let render = Arc::new(Mutex::new(scene.clone()));
         let render_copy = Arc::clone(&render);
-
-        let thread = task::spawn(async move {
+        let fut = async move {
             let mut scene = Scene::new();
             let msg = ipc::physics_recv();
 
@@ -68,7 +71,14 @@ impl PhysicsWorkerThread {
                 timer = Instant::now();
 
                 if el.as_secs_f32() < spt_target {
+                    #[cfg(not(target_arch = "wasm32"))]
                     task::sleep(Duration::from_secs_f32(spt_target) - el).await;
+
+                    #[cfg(target_arch = "wasm32")]
+                    gloo_timers::future::TimeoutFuture::new(
+                        ((spt_target - el.as_secs_f32()) * 1000.) as u32,
+                    )
+                    .await;
                 }
 
                 scene.settings.dtime = spt_target;
@@ -82,8 +92,16 @@ impl PhysicsWorkerThread {
                 let mut render_lock = render.lock().await;
                 *render_lock = scene.clone();
                 drop(render_lock);
+
+                gloo_timers::future::TimeoutFuture::new(1).await;
             }
-        });
+        };
+
+        #[cfg(not(target_arch = "wasm32"))]
+        let thread = task::spawn(fut);
+
+        #[cfg(target_arch = "wasm32")]
+        let thread = task::spawn_local(fut);
 
         Self {
             render,

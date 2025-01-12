@@ -256,8 +256,9 @@ impl Scene {
 impl Scene {
     pub fn apply_external_forces(&mut self) {
         self.positions
-            .par_iter()
-            .zip(self.velocities.par_iter_mut())
+            // .par_iter()
+            .iter()
+            .zip(self.velocities.iter_mut())
             .for_each(|(pos, vel)| {
                 let accel = Self::external_forces(self.mouse, *pos, *vel, self.settings);
                 *vel += accel * self.settings.dtime;
@@ -269,7 +270,16 @@ impl Scene {
     pub fn update_predictions(&mut self) {
         (0..self.len())
             .into_par_iter()
-            .map(|i| self.positions[i] + self.velocities[i] * (1. / 120.))
+            .map(|i| {
+                self.positions[i]
+                    + self.velocities[i]
+                        * 'lookahead: {
+                            #[cfg(not(target_arch = "wasm32"))]
+                            break 'lookahead 1. / 120.;
+                            #[cfg(target_arch = "wasm32")]
+                            break 'lookahead 1. / 60.;
+                        }
+            })
             .collect_into_vec(&mut self.predictions);
     }
 

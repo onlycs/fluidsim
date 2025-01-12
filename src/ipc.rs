@@ -1,9 +1,20 @@
 use crate::prelude::*;
 
 use async_std::channel;
-use async_std::sync::{Arc, Mutex};
 use lazy_static::lazy_static;
 use physics::settings::{MouseState, SimSettings};
+
+#[cfg(not(target_arch = "wasm32"))]
+use async_std::{
+    channel::{self, Receiver, Sender},
+    sync::{Arc, Mutex},
+};
+
+#[cfg(target_arch = "wasm32")]
+use std::sync::{
+    mpsc::{self, Receiver, Sender},
+    Arc, Mutex,
+};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ToPhysics {
@@ -22,7 +33,11 @@ struct UniversalIpc {
 
 impl UniversalIpc {
     fn new() -> Self {
+        #[cfg(not(target_arch = "wasm32"))]
         let (physics_send, physics_recv) = channel::unbounded();
+
+        #[cfg(target_arch = "wasm32")]
+        let (physics_send, physics_recv) = mpsc::channel();
 
         Self {
             physics_send,
@@ -37,12 +52,20 @@ lazy_static! {
 
 macro_rules! cfg_sender {
     ($sender:ident: $ty:ty) => {
+        #[cfg(not(target_arch = "wasm32"))]
         pub fn $sender(msg: $ty) {
             trace!("Sending message via {}: {:?}", stringify!($sender), msg);
 
             task::spawn(async move {
                 IPC.lock().await.$sender.send(msg).await.unwrap();
             });
+        }
+
+        #[cfg(target_arch = "wasm32")]
+        pub fn $sender(msg: $ty) {
+            trace!("Sending message via {}: {:?}", stringify!($sender), msg);
+
+            IPC.lock().unwrap().$sender.send(msg).unwrap();
         }
     };
 
@@ -53,10 +76,16 @@ macro_rules! cfg_sender {
 
 macro_rules! cfg_receiver {
     ($receiver:ident: $ty:ty) => {
+        #[cfg(not(target_arch = "wasm32"))]
         pub fn $receiver() -> Receiver<$ty> {
             task::block_on(async move {
                 IPC.lock().await.$receiver.take().unwrap()
             })
+        }
+
+        #[cfg(target_arch = "wasm32")]
+        pub fn $receiver() -> Receiver<$ty> {
+            IPC.lock().unwrap().$receiver.take().unwrap()
         }
     };
 

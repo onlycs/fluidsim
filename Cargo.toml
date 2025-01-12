@@ -7,15 +7,12 @@ edition = "2021"
 async-std = { version = "1.13.0", features = ["unstable"] }
 egui = "0.30.0"
 futures = "0.3.31"
-ggez = { git = "https://github.com/ggez/ggez", branch = "devel" }
 itertools = "0.13.0"
 lazy_static = "1.5.0"
 log = "0.4.22"
-num = "0.4.3"
 rand = "0.8.5"
 rayon = "1.10.0"
 thiserror = { git = "https://github.com/onlycs/thiserror" }
-typenum = "1.17.0"
 
 [dependencies.skuld]
 git = "https://github.com/onlycs/asgard"
@@ -24,3 +21,21 @@ features = ["facade"]
 
 [target.'cfg(target_os = "linux")'.dependencies]
 hyprland = "0.4.0-beta.1"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies.ggez-wasm]
+git = "https://github.com/ggez/ggez"
+branch = "web"
+package = "ggez"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2.15", features = ["js"] }
+ring = { version = "0.17.8", features = ["wasm32_unknown_unknown_js"] }
+rustls-pki-types = { version = "1.10.1", features = ["web"] }
+console_error_panic_hook = "0.1.7"
+web-time = "1.1.0"
+web-sys = { version = "0.3.64", features = ["GpuImageCopyBuffer"] }
+gloo-timers = "0.3.0"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies.ggez]
+git = "https://github.com/ggez/ggez"
+branch = "devel"

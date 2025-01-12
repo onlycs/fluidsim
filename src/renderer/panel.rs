@@ -218,6 +218,7 @@ impl Panel {
         if updated || reset {
             self.settings.position = position;
             self.settings.size = size;
+
             ipc::physics_send(ToPhysics::Settings(self.settings));
         }
 
@@ -238,6 +239,7 @@ impl Panel {
         self.settings.size = size;
         self.settings.position = pos;
 
+        #[cfg(not(target_arch = "wasm32"))]
         ipc::physics_send(ToPhysics::Settings(self.settings));
     }
 

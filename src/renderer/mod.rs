@@ -1,16 +1,21 @@
-use crate::physics::PhysicsWorkerThread;
 use crate::prelude::*;
+
+#[cfg(not(target_arch = "wasm32"))]
+use ggez::winit::keyboard::{KeyCode, PhysicalKey};
+
+#[cfg(target_arch = "wasm32")]
+use ggez::input::keyboard::{KeyCode, KeyMods};
+
 use ggez::{
     event,
     graphics::{self, DrawParam},
     input::keyboard::KeyInput,
-    winit::{
-        event::MouseButton,
-        keyboard::{KeyCode, PhysicalKey},
-    },
+    winit::event::MouseButton,
 };
+
 use panel::Panel;
 use physics::settings::MouseState;
+use physics::PhysicsWorkerThread;
 
 mod egui_translator;
 mod panel;
@@ -46,6 +51,7 @@ impl event::EventHandler for State {
 
         if data != self.mouse {
             self.mouse = data;
+
             ipc::physics_send(ToPhysics::UpdateMouse(data));
         }
 
@@ -69,6 +75,7 @@ impl event::EventHandler for State {
 
         // grab the current scene and create a mesh
         let sc = self.physics.get();
+
         let mut mesh = graphics::MeshBuilder::new();
 
         // draw to mesh from scene
@@ -103,6 +110,7 @@ impl event::EventHandler for State {
         Ok(())
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn key_down_event(
         &mut self,
         ctx: &mut ggez::Context,
@@ -128,6 +136,39 @@ impl event::EventHandler for State {
             KeyCode::KeyQ if input.mods.control_key() => {
                 info!("Got ctrl+q, quitting!");
                 ipc::physics_send(ToPhysics::Kill);
+                ctx.request_quit();
+            }
+            _ => (),
+        }
+
+        Ok(())
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn key_down_event(
+        &mut self,
+        ctx: &mut ggez::Context,
+        input: KeyInput,
+        _repeated: bool,
+    ) -> Result<(), ggez::GameError> {
+        let Some(code) = input.keycode else {
+            return Ok(());
+        };
+
+        match code {
+            KeyCode::Space => ipc::physics_send(ToPhysics::Pause),
+            KeyCode::Right => ipc::physics_send(ToPhysics::Step),
+            KeyCode::C => {
+                debug!("Toggling config panel");
+                self.panel.toggle();
+            }
+            KeyCode::H => {
+                debug!("Toggling help text");
+                self.panel.toggle_help();
+            }
+            KeyCode::R => ipc::physics_send(ToPhysics::Reset),
+            KeyCode::Q if input.mods.intersects(KeyMods::CTRL) => {
+                info!("Quitting!");
                 ctx.request_quit();
             }
             _ => (),
