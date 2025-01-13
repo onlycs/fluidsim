@@ -71,7 +71,7 @@ impl PhysicsWorkerThread {
                     task::sleep(Duration::from_secs_f32(spt_target) - el).await;
                 }
 
-                scene.settings.dtime = spt_target;
+                scene.settings.dtime = (el + timer.elapsed()).as_secs_f32();
 
                 // update scene
                 if !pause {
@@ -98,5 +98,9 @@ impl PhysicsWorkerThread {
         }
 
         &self.saved
+    }
+
+    pub fn tps(&self) -> f32 {
+        1. / self.saved.settings.dtime
     }
 }

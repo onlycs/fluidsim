@@ -27,14 +27,16 @@ impl LinearGradient {
         }
 
         if t <= self.frames[0].0 {
-            return self.frames[0].1.clone();
+            return self.frames[0].1;
         }
 
         if t >= self.frames[self.frames.len() - 1].0 {
-            return self.frames[self.frames.len() - 1].1.clone();
+            return self.frames[self.frames.len() - 1].1;
         }
 
-        for i in 0..self.frames.len() - 1 {
+        let mut i = self.frames.len() / 2;
+
+        loop {
             let (t0, c0) = self.frames[i];
             let (t1, c1) = self.frames[i + 1];
 
@@ -42,8 +44,12 @@ impl LinearGradient {
                 let local_t = (t - t0) / (t1 - t0);
                 return lerp(c0, c1, local_t);
             }
-        }
 
-        unreachable!("t should be within the range of frame intervals");
+            if t < t0 {
+                i /= 2;
+            } else {
+                i += (self.frames.len() - i) / 2;
+            }
+        }
     }
 }

@@ -43,11 +43,12 @@ impl MouseState {
 }
 
 impl SimSettings {
-    pub fn low_density() -> Self {
+    pub fn zero_gravity() -> Self {
         Self {
-            target_density: 25.0,
-            pressure_multiplier: 190.0,
-            particles: Vec2::new(65., 65.),
+            gravity: 0.0,
+            target_density: 4.0,
+            pressure_multiplier: 20.0,
+            viscosity_strength: 0.5,
             ..Default::default()
         }
     }

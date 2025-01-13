@@ -19,6 +19,7 @@ pub struct State {
     physics: PhysicsWorkerThread,
     panel: Panel,
     mouse: Option<MouseState>,
+    tps_data: (f32, usize),
 }
 
 impl State {
@@ -27,6 +28,7 @@ impl State {
             physics: PhysicsWorkerThread::new(),
             panel: Panel::default(),
             mouse: None,
+            tps_data: (0.0, 0),
         }
     }
 }
@@ -79,6 +81,31 @@ impl event::EventHandler for State {
 
         // draw the panel to the canvas
         canvas.draw(&*self.panel, DrawParam::new().dest([-halfw, -halfh]));
+
+        // draw the current fps
+        let (ref mut old_tps, ref mut old_count) = self.tps_data;
+
+        let fps = format!("Rendering FPS: {:.2}", ctx.time.fps());
+        let physics_fps = format!(
+            "Physics TPS: {}",
+            if *old_count >= 10 {
+                *old_tps = self.physics.tps();
+                *old_count = 0;
+                self.physics.tps()
+            } else {
+                *old_count += 1;
+                *old_tps
+            }
+        );
+
+        let fps_text = graphics::Text::new(fps);
+        let physics_fps_text = graphics::Text::new(physics_fps);
+
+        let fps_dest = Vec2::new(-halfw + 10.0, halfh - 20.0);
+        let physics_fps_dest = Vec2::new(-halfw + 10.0, halfh - 40.0);
+
+        canvas.draw(&fps_text, fps_dest);
+        canvas.draw(&physics_fps_text, physics_fps_dest);
 
         canvas.finish(ctx)?;
 

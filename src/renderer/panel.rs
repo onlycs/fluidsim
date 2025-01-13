@@ -178,11 +178,11 @@ impl Panel {
                 }
 
                 if ui
-                    .add_sized([180., 30.], Button::new("Low Density"))
+                    .add_sized([180., 30.], Button::new("Zero Gravity"))
                     .clicked()
                 {
                     reset = true;
-                    self.settings = SimSettings::low_density();
+                    self.settings = SimSettings::zero_gravity();
                 }
 
                 if self.help {

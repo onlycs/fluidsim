@@ -460,7 +460,7 @@ impl Scene {
                 let offset = pos - positions[particle];
                 let dist = offset.distance(Vec2::ZERO);
 
-                let dir = if dist == 0. {
+                let dir = if dist <= f32::EPSILON {
                     // shoot off in a random direction. we don't want to have two particles on top of each other
                     Vec2::new(rand::random::<f32>(), rand::random::<f32>()).normalize()
                 } else {
