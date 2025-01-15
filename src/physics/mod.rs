@@ -1,10 +1,9 @@
-pub mod prelude;
 pub mod scene;
-pub mod settings;
 
 use crate::prelude::*;
+use physics::scene::Scene;
+
 use async_std::sync::{Arc, Mutex};
-use physics::prelude::*;
 use std::time::{Duration, Instant};
 
 pub struct PhysicsWorkerThread {
@@ -25,7 +24,7 @@ impl PhysicsWorkerThread {
 
             let render = Arc::clone(&render_copy);
 
-            let mut pause = true;
+            let mut pause = false;
             let mut timer = Instant::now();
             let mut spt_target = 1. / scene.settings.fps;
 

@@ -3,12 +3,11 @@ use crate::prelude::*;
 use async_std::channel;
 use async_std::sync::{Arc, Mutex};
 use lazy_static::lazy_static;
-use physics::settings::{MouseState, SimSettings};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ToPhysics {
     Settings(SimSettings),
-    UpdateMouse(Option<MouseState>),
+    UpdateMouse(MouseState),
     Reset,
     Pause,
     Step,
