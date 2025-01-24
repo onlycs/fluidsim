@@ -22,24 +22,7 @@ pub struct SimSettings {
     pub gap: f32,
     pub radius: f32,
 
-    pub size: Vec2,
-    pub position: Vec2,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct MouseState {
-    pub px: Vec2,
-    pub is_left: bool,
-}
-
-impl MouseState {
-    pub fn intensity(&self) -> f32 {
-        if self.is_left {
-            1.0
-        } else {
-            -1.0
-        }
-    }
+    pub window_size: Vec2,
 }
 
 impl SimSettings {
@@ -75,11 +58,28 @@ impl Default for SimSettings {
             interaction_radius: 4.0,
             interaction_strength: 90.0,
 
-            // window size and position
-            size: Vec2::new(800., 600.),
-            position: Vec2::ZERO,
+            // window size
+            window_size: Vec2::new(1000., 750.),
 
             mass: 1.0,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub struct MouseState {
+    pub px: Vec2,
+    pub left: bool,
+    pub right: bool,
+    pub panel_hover: bool,
+}
+
+impl MouseState {
+    pub fn intensity(&self) -> f32 {
+        if self.left {
+            1.0
+        } else {
+            -1.0
         }
     }
 }

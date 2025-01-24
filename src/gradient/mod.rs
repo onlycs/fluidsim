@@ -1,12 +1,12 @@
-use ggez::graphics;
+use wgpu::Color;
 
 #[derive(Clone, Debug)]
 pub struct LinearGradient {
-    frames: Vec<(f32, graphics::Color)>,
+    frames: Vec<(f32, Color)>,
 }
 
-fn lerp(c0: graphics::Color, c1: graphics::Color, t: f32) -> graphics::Color {
-    graphics::Color {
+fn lerp(c0: Color, c1: Color, t: f64) -> Color {
+    Color {
         r: c0.r + (c1.r - c0.r) * t,
         g: c0.g + (c1.g - c0.g) * t,
         b: c0.b + (c1.b - c0.b) * t,
@@ -15,11 +15,11 @@ fn lerp(c0: graphics::Color, c1: graphics::Color, t: f32) -> graphics::Color {
 }
 
 impl LinearGradient {
-    pub fn new(frames: Vec<(f32, graphics::Color)>) -> Self {
+    pub fn new(frames: Vec<(f32, Color)>) -> Self {
         Self { frames }
     }
 
-    pub fn sample(&self, t: f32) -> graphics::Color {
+    pub fn sample(&self, t: f32) -> Color {
         assert!((0.0..=1.0).contains(&t), "t must be within 0.0 and 1.0");
 
         if self.frames.is_empty() {
@@ -42,7 +42,7 @@ impl LinearGradient {
 
             if t0 <= t && t <= t1 {
                 let local_t = (t - t0) / (t1 - t0);
-                return lerp(c0, c1, local_t);
+                return lerp(c0, c1, local_t as f64);
             }
 
             if t < t0 {

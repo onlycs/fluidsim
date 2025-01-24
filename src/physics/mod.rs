@@ -1,18 +1,19 @@
 pub mod prelude;
 pub mod scene;
-pub mod settings;
 
 use crate::prelude::*;
 use async_std::sync::{Arc, Mutex};
 use physics::prelude::*;
 use std::time::{Duration, Instant};
 
+#[cfg(not(feature = "sync"))]
 pub struct PhysicsWorkerThread {
     render: Arc<Mutex<Scene>>,
     saved: Scene,
     thread: task::JoinHandle<()>,
 }
 
+#[cfg(not(feature = "sync"))]
 impl PhysicsWorkerThread {
     pub fn new() -> Self {
         let scene = Scene::new();

@@ -3,7 +3,6 @@ use std::ops::{Deref, DerefMut};
 
 use super::egui_translator::EguiTranslator;
 use egui::{Button, RichText, Slider};
-use physics::settings::SimSettings;
 
 const TEXT_SIZE: f32 = 16.0;
 
