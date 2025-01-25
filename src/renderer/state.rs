@@ -6,17 +6,17 @@ use physics::PhysicsWorkerThread;
 
 cfg_if! {
     if #[cfg(feature = "sync")] {
-        #[derive(Default)]
-        pub struct PauseState {
+        pub struct TimeState {
             pub paused: bool,
             pub step: bool,
+            pub last_instant: Instant,
         }
 
 
         pub struct Game {
             pub physics: Scene,
 
-            pub pause: PauseState,
+            pub time: TimeState,
             pub reset: bool,
         }
     } else {
@@ -34,7 +34,11 @@ impl Game {
             if #[cfg(feature = "sync")] {
                 Self {
                     physics: Scene::new(),
-                    pause: PauseState::default(),
+                    time: TimeState {
+                        paused: true,
+                        step: false,
+                        last_instant: Instant::now()
+                    },
                     reset: false,
                 }
             } else {
@@ -55,5 +59,20 @@ impl Game {
     #[cfg(not(feature = "sync"))]
     pub fn scene(&mut self) -> &Scene {
         self.physics.get()
+    }
+
+    #[cfg(feature = "sync")]
+    pub fn update(&mut self) {
+        if self.reset {
+            self.physics.reset();
+            self.reset = false;
+        }
+
+        self.physics.settings.dtime = self.time.last_instant.elapsed().as_secs_f32();
+
+        if !self.time.paused || self.time.step {
+            self.physics.update();
+            self.time.step = false;
+        }
     }
 }

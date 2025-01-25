@@ -40,7 +40,7 @@ impl SimSettings {
 impl Default for SimSettings {
     fn default() -> Self {
         Self {
-            dtime: 1.8,
+            dtime: 0.002,
             fps: 120.0,
 
             gravity: 9.8,
@@ -74,7 +74,6 @@ pub struct MouseState {
     pub px: Vec2,
     pub left: bool,
     pub right: bool,
-    pub panel_hover: bool,
 }
 
 impl MouseState {

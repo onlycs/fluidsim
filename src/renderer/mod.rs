@@ -2,6 +2,7 @@ use crate::prelude::*;
 
 use egui::EguiState;
 use fps::{FpsCounter, FpsState};
+use keyboard::KeyboardHelper;
 use panel::{Panel, UpdateData};
 use shader::VsState;
 use state::Game;
@@ -12,11 +13,13 @@ use winit::{
     dpi::PhysicalSize,
     event::WindowEvent,
     event_loop::ActiveEventLoop,
+    keyboard::{KeyCode, PhysicalKey},
     window::{Window, WindowId},
 };
 
 mod egui;
 mod fps;
+mod keyboard;
 mod panel;
 mod shader;
 mod state;
@@ -101,7 +104,7 @@ impl WgpuState {
             width: winx as u32,
             height: winy as u32,
             #[cfg(not(target_arch = "wasm32"))]
-            present_mode: wgpu::PresentMode::Immediate,
+            present_mode: wgpu::PresentMode::Fifo,
             #[cfg(target_arch = "wasm32")]
             present_mode: wgpu::PresentMode::Fifo,
             desired_maximum_frame_latency: 0,
@@ -159,6 +162,7 @@ pub struct SimRenderer {
     egui: EguiState,
     panel: Panel,
     fps: FpsState,
+    inputs: KeyboardHelper,
 
     game: state::Game,
 }
@@ -175,6 +179,7 @@ impl SimRenderer {
             shader: VsState::default(),
             egui: EguiState::default(),
             panel: Panel::default(),
+            inputs: KeyboardHelper::default(),
         }
     }
 
@@ -244,6 +249,9 @@ impl SimRenderer {
 
     fn draw(&mut self) -> Result<(), DrawError> {
         let device = &self.wgpu.device;
+
+        #[cfg(feature = "sync")]
+        self.game.update();
 
         cfg_if! {
             if #[cfg(feature = "sync")] {
@@ -388,6 +396,53 @@ impl ApplicationHandler for SimRenderer {
 
         if self.egui.event(&self.wgpu.window, &event).consumed {
             return;
+        }
+
+        if self.inputs.process(&event) {
+            for key in self.inputs.keydown() {
+                match key {
+                    KeyCode::Escape => {
+                        info!("Got escape, quitting!");
+                        event_loop.exit();
+                    }
+                    KeyCode::Space => {
+                        cfg_if! {
+                            if #[cfg(feature = "sync")] {
+                                self.game.time.paused = !self.game.time.paused;
+                            } else {
+                                ipc::physics_send(ToPhysics::Pause);
+                            }
+                        };
+                    }
+                    KeyCode::ArrowRight => {
+                        cfg_if! {
+                            if #[cfg(feature = "sync")] {
+                                if self.game.time.paused {
+                                    self.game.time.step = true;
+                                }
+                            } else {
+                                ipc::physics_send(ToPhysics::Step);
+                            }
+                        };
+                    }
+                    KeyCode::KeyR => {
+                        cfg_if! {
+                            if #[cfg(feature = "sync")] {
+                                self.game.reset = true;
+                            } else {
+                                ipc::physics_send(ToPhysics::Reset);
+                            }
+                        }
+                    }
+                    KeyCode::KeyC => {
+                        self.panel.toggle();
+                    }
+                    KeyCode::KeyH => {
+                        self.panel.toggle_help();
+                    }
+                    _ => {}
+                }
+            }
         }
 
         match &event {
