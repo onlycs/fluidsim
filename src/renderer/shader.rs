@@ -13,7 +13,7 @@ use wgpu::{util::DeviceExt, BindGroupLayoutDescriptor};
 
 use super::WgpuState;
 
-pub const PRIM_LEN: usize = 256;
+pub const PRIM_LEN: usize = 16384;
 
 pub const FS: wgpu::ShaderModuleDescriptor<'_> = wgpu::include_wgsl!("../shader/circle.fs.wgsl");
 pub const VS: wgpu::ShaderModuleDescriptor<'_> = wgpu::include_wgsl!("../shader/circle.vs.wgsl");
@@ -106,18 +106,7 @@ pub struct VsData {
 
 impl VsData {
     pub fn update(&mut self) -> Result<(), DrawError> {
-        // lyon: tesselate a circle
-        let mut buf = VertexBuffers::new();
-        let mut tessellator = FillTessellator::new();
-
-        tessellator.tessellate_circle(
-            Point::new(0., 0.),
-            100.,
-            &FillOptions::default(),
-            &mut BuffersBuilder::new(&mut buf, WithId(0)),
-        )?;
-
-        self.prims = Vec::with_capacity(256);
+        self.prims = Vec::with_capacity(PRIM_LEN);
 
         self.prims.push(VsCirclePrimitive {
             color: [1., 0., 0., 1.],
@@ -138,10 +127,8 @@ impl VsData {
                 z_index: 0,
                 _pad: 0,
             };
-            PRIM_LEN - 2
+            PRIM_LEN - 3
         ]);
-
-        self.tesselation_buf = buf;
 
         Ok(())
     }
@@ -171,7 +158,7 @@ impl VsState {
         let prims_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("primitive buffer"),
             size: (PRIM_LEN * std::mem::size_of::<VsCirclePrimitive>()) as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
@@ -214,7 +201,7 @@ impl VsState {
                     binding: 1,
                     visibility: wgpu::ShaderStages::VERTEX,
                     ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
                         has_dynamic_offset: false,
                         min_binding_size: wgpu::BufferSize::new(prims_buf.size()),
                     },
@@ -294,7 +281,7 @@ impl VsState {
             globals: VsGlobals {
                 resolution: [0., 0.],
                 scroll: [0., 0.],
-                zoom: 1.,
+                zoom: 1.0,
                 _pad: [0.; _],
             },
             prims: Vec::new(),
