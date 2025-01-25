@@ -141,7 +141,6 @@ impl SimRenderer {
         #[cfg(target_arch = "wasm32")]
         {
             use winit::platform::web::WindowExtWebSys;
-
             web_sys::window()
                 .and_then(|win| win.document())
                 .and_then(|doc| {
@@ -187,6 +186,7 @@ impl SimRenderer {
         };
 
         self.shader.globals.resolution = size.to_array();
+
         self.wgpu.config.width = size.x as u32;
         self.wgpu.config.height = size.y as u32;
     }

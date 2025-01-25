@@ -4,7 +4,8 @@
     let_chains,
     if_let_guard,
     trait_alias,
-    trivial_bounds
+    trivial_bounds,
+    generic_arg_infer
 )]
 
 #[macro_use]

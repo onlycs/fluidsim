@@ -4,14 +4,14 @@ struct Globals {
     resolution: vec2<f32>,
     scroll: vec2<f32>,
     zoom: f32,
-	_pad: i32,
+	_pad: vec2<f32>,
 };
 
 struct Primitive {
     color: vec4<f32>,
     translate: vec2<f32>,
     z_index: i32,
-	_pad: f32,
+	_pad: u32,
 };
 
 struct Primitives {

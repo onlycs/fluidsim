@@ -1,5 +1,5 @@
 [package]
-name = "fluidsim"
+name = "fluidsim_exec"
 version = "0.1.0"
 edition = "2021"
 
@@ -46,6 +46,7 @@ version = "0.30.0"
 default-features = false
 
 [lib]
+name = "fluidsim"
 crate-type = ["cdylib", "rlib"]
 
 [features]

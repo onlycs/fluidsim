@@ -24,7 +24,7 @@ pub struct VsCirclePrimitive {
     pub color: [f32; 4],
     pub translate: [f32; 2],
     pub z_index: i32,
-    pub _pad: i32,
+    pub _pad: u32,
 }
 
 impl Default for VsCirclePrimitive {
@@ -44,7 +44,7 @@ pub struct VsGlobals {
     pub resolution: [f32; 2],
     pub scroll: [f32; 2],
     pub zoom: f32,
-    pub _pad: f32,
+    pub _pad: [f32; 3],
 }
 
 #[repr(C)]
@@ -176,12 +176,6 @@ impl VsState {
             mapped_at_creation: false,
         });
 
-        println!(
-            "{} {}",
-            std::mem::size_of::<VsGlobals>() as u64,
-            globals_buf.size()
-        );
-
         let init_ibuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("init buffer"),
             contents: bytemuck::cast_slice(&tesselation_buf.indices),
@@ -295,7 +289,7 @@ impl VsState {
                 resolution: [0., 0.],
                 scroll: [0., 0.],
                 zoom: 1.,
-                _pad: 0.,
+                _pad: [0.; _],
             },
             prims: Vec::new(),
             prims_buf,
@@ -324,6 +318,7 @@ impl Deref for VsState {
 }
 
 impl DerefMut for VsState {
+    #[track_caller]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.0.as_mut().unwrap()
     }
