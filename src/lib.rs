@@ -16,7 +16,6 @@ extern crate cfg_if;
 extern crate async_std;
 extern crate egui;
 extern crate egui_wgpu;
-extern crate futures;
 extern crate glam;
 extern crate itertools;
 extern crate lazy_static;

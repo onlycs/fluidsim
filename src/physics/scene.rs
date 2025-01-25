@@ -1,14 +1,12 @@
 use core::f32;
 
-use crate::{gradient::LinearGradient, prelude::*};
+use crate::prelude::*;
 use itertools::Itertools;
 
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator,
     IntoParallelRefMutIterator, ParallelIterator,
 };
-
-const SCALE: f32 = 100.0;
 
 fn rad1((x, y): (isize, isize)) -> [(isize, isize); 9] {
     [
@@ -136,7 +134,7 @@ impl Scene {
     }
 
     pub fn absbounds(&self) -> Vec2 {
-        self.settings.window_size / SCALE / 2.0
+        self.settings.window_size / PX_PER_UNIT / 2.0
     }
 
     /// organize the particles in a centered grid
@@ -483,7 +481,7 @@ impl Scene {
         let gravity = Vec2::new(0.0, settings.gravity);
 
         if mouse.left || mouse.right {
-            let mousepos = mouse.px / SCALE - settings.window_size / SCALE / 2.0;
+            let mousepos = mouse.px / PX_PER_UNIT - settings.window_size / PX_PER_UNIT / 2.0;
             let offset = mousepos - position;
             let dist2 = offset.dot(offset);
 

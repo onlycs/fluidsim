@@ -1,6 +1,7 @@
 use crate::prelude::*;
 
 use egui::EguiState;
+use fps::{FpsCounter, FpsState};
 use panel::Panel;
 use shader::VsState;
 use state::Game;
@@ -15,6 +16,7 @@ use winit::{
 };
 
 mod egui;
+mod fps;
 mod panel;
 mod shader;
 mod state;
@@ -72,7 +74,10 @@ impl WgpuState {
                     #[cfg(not(target_arch = "wasm32"))]
                     required_limits: wgpu::Limits::default(),
                     #[cfg(target_arch = "wasm32")]
-                    required_limits: wgpu::Limits::downlevel_webgl2_defaults(),
+                    required_limits: wgpu::Limits {
+                        max_storage_buffer_binding_size: 134217728,
+                        ..wgpu::Limits::downlevel_webgl2_defaults()
+                    },
                     memory_hints: wgpu::MemoryHints::default(),
                 },
                 None,
@@ -80,27 +85,25 @@ impl WgpuState {
             .await?;
 
         let caps = surface.get_capabilities(&adapter);
-        let selected_fmt = [
-            wgpu::TextureFormat::Bgra8UnormSrgb,
-            wgpu::TextureFormat::Rgba8UnormSrgb,
-            wgpu::TextureFormat::Bgra8Unorm,
-        ];
+        let selected_fmt = [wgpu::TextureFormat::Bgra8Unorm];
 
         let texture_fmt = caps
             .formats
             .iter()
             .find(|f| selected_fmt.contains(f))
-            .unwrap_or_else(|| {
-                info!("{:?}", caps.formats);
-                panic!()
-            });
+            .ok_or_else(|| RendererError::NoTextureFormat {
+                available: format!("{:?}", caps.formats),
+            })?;
 
         let surface_cfg = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: *texture_fmt,
             width: winx as u32,
             height: winy as u32,
-            present_mode: wgpu::PresentMode::AutoVsync,
+            #[cfg(not(target_arch = "wasm32"))]
+            present_mode: wgpu::PresentMode::Immediate,
+            #[cfg(target_arch = "wasm32")]
+            present_mode: wgpu::PresentMode::Fifo,
             desired_maximum_frame_latency: 0,
             alpha_mode: caps.alpha_modes[0],
             view_formats: vec![],
@@ -155,6 +158,7 @@ pub struct SimRenderer {
     shader: VsState,
     egui: EguiState,
     panel: Panel,
+    fps: FpsState,
 
     game: state::Game,
 }
@@ -167,6 +171,7 @@ impl SimRenderer {
             instance,
             wgpu: WgpuState::default(),
             game: Game::new(),
+            fps: FpsState::default(),
             shader: VsState::default(),
             egui: EguiState::default(),
             panel: Panel::default(),
@@ -174,7 +179,7 @@ impl SimRenderer {
     }
 
     fn uninit(&self) -> bool {
-        self.wgpu.uninit() || self.egui.uninit() || self.shader.uninit()
+        self.wgpu.uninit() || self.egui.uninit() || self.shader.uninit() || self.fps.uninit()
     }
 
     async fn init(&mut self, window: Window) -> Result<(), RendererError> {
@@ -189,11 +194,16 @@ impl SimRenderer {
         self.wgpu.init(window, &self.instance, size).await?;
         self.shader.init(&self.wgpu)?;
         self.egui.init(&self.wgpu);
+        self.fps.init(&self.wgpu);
+
+        self.wgpu.window.set_min_inner_size(Some(MIN_WINDOW));
 
         Ok(())
     }
 
     fn update_window_size(&mut self, size: Vec2) {
+        let scale = self.wgpu.window.scale_factor() as f32;
+
         cfg_if! {
             if #[cfg(feature = "sync")] {
                 self.game.physics.settings.window_size = size;
@@ -211,6 +221,21 @@ impl SimRenderer {
             .surface
             .configure(&self.wgpu.device, &self.wgpu.config);
 
+        // why does self.fps.x and self.fps.y both count as a mut borrow of self.fps
+        // since there are no self-ref structs... idk
+        let FpsCounter {
+            buffer,
+            font_system,
+            ..
+        } = &mut *self.fps;
+
+        buffer.set_size(
+            font_system,
+            Some(size.x as f32 * scale),
+            Some(size.y as f32 * scale),
+        );
+
+        // etc
         #[cfg(not(feature = "sync"))]
         {
             ipc::physics_send(ToPhysics::Settings(self.game.config));
@@ -218,8 +243,29 @@ impl SimRenderer {
     }
 
     fn draw(&mut self) -> Result<(), DrawError> {
-        let surface_tex = self.wgpu.surface.get_current_texture()?;
         let device = &self.wgpu.device;
+
+        cfg_if! {
+            if #[cfg(feature = "sync")] {
+                let scene = &self.game.physics;
+            } else {
+                let scene = self.game.physics.get();
+            }
+        };
+
+        cfg_if! {
+            if #[cfg(feature = "sync")] {
+                let settings = &scene.settings;
+            } else {
+                let settings = &mut self.game.config;
+            }
+        };
+
+        let surface_tex = self.wgpu.surface.get_current_texture()?;
+
+        let surface_view = surface_tex
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
 
         let msaa_tex = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("msaa circle texture"),
@@ -233,15 +279,12 @@ impl SimRenderer {
         });
 
         let msaa_view = msaa_tex.create_view(&wgpu::TextureViewDescriptor::default());
-        let surface_view = surface_tex
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
 
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("circle command encoder"),
         });
 
-        self.shader.update()?;
+        self.shader.update(&self.wgpu, *settings, scene)?;
 
         self.wgpu.queue.write_buffer(
             &self.shader.globals_buf,
@@ -255,6 +298,7 @@ impl SimRenderer {
             bytemuck::cast_slice(&self.shader.prims),
         );
 
+        // draw dots
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: None,
@@ -276,23 +320,28 @@ impl SimRenderer {
             pass.set_index_buffer(self.shader.index_buf.slice(..), wgpu::IndexFormat::Uint16);
             pass.set_vertex_buffer(0, self.shader.vertex_buf.slice(..));
 
-            pass.draw_indexed(0..self.shader.index_buf.size() as u32 / 2, 0, 0..2);
+            pass.draw_indexed(
+                0..self.shader.index_buf.size() as u32 / 2,
+                0,
+                0..scene.positions.len() as u32,
+            );
         }
 
+        // draw fps counter
         {
-            cfg_if! {
-                if #[cfg(feature = "sync")] {
-                    let settings = &mut self.game.physics.settings;
-                } else {
-                    let settings = &mut self.game.config;
-                }
-            };
+            self.fps.render(&self.wgpu, &mut encoder, &surface_view)?;
+        }
+
+        // draw egui
+        {
+            #[cfg(feature = "sync")]
+            let settings = &mut self.game.physics.settings;
 
             self.egui.draw(
                 &self.wgpu,
                 &mut encoder,
                 &surface_view,
-                self.panel.update(settings),
+                self.panel.update(settings, &mut self.shader.retessellate),
             );
         }
 
@@ -304,12 +353,7 @@ impl SimRenderer {
 }
 
 impl ApplicationHandler for SimRenderer {
-    fn window_event(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-        window_id: WindowId,
-        event: WindowEvent,
-    ) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         if self.uninit() {
             return;
         }
@@ -326,6 +370,7 @@ impl ApplicationHandler for SimRenderer {
             WindowEvent::RedrawRequested => {
                 self.draw().unwrap();
                 self.wgpu.window.request_redraw();
+                self.fps.update();
             }
             WindowEvent::Resized(size) => {
                 self.update_window_size(Vec2::new(size.width as f32, size.height as f32));

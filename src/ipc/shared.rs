@@ -59,7 +59,7 @@ impl Default for SimSettings {
             interaction_strength: 90.0,
 
             // window size
-            window_size: Vec2::new(1000., 750.),
+            window_size: Vec2::new(1200., 800.),
 
             mass: 1.0,
         }

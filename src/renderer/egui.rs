@@ -49,6 +49,8 @@ impl EguiTranslator {
         surface_view: &TextureView,
         ui: impl FnMut(&Context),
     ) {
+        self.context.set_pixels_per_point(1.0);
+
         let input = self.state.take_egui_input(&*wgpu.window);
         let output = self.context.run(input, ui);
 
@@ -66,7 +68,7 @@ impl EguiTranslator {
 
         let desc = ScreenDescriptor {
             size_in_pixels: [wgpu.config.width, wgpu.config.height],
-            pixels_per_point: wgpu.window.scale_factor() as f32,
+            pixels_per_point: self.context.pixels_per_point(),
         };
 
         self.renderer

@@ -1,13 +1,8 @@
 use crate::prelude::*;
-use shared::MouseState;
+use physics::scene::Scene;
 
-cfg_if! {
-    if #[cfg(feature = "sync")] {
-        use physics::scene::Scene;
-    } else {
-        use physics::PhysicsWorkerThread;
-    }
-}
+#[cfg(not(feature = "sync"))]
+use physics::PhysicsWorkerThread;
 
 cfg_if! {
     if #[cfg(feature = "sync")] {
@@ -38,5 +33,15 @@ impl Game {
                 }
             }
         }
+    }
+
+    #[cfg(feature = "sync")]
+    pub fn scene(&self) -> &Scene {
+        &self.physics
+    }
+
+    #[cfg(not(feature = "sync"))]
+    pub fn scene(&mut self) -> &Scene {
+        self.physics.get()
     }
 }

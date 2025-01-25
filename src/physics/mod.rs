@@ -1,9 +1,8 @@
-pub mod prelude;
 pub mod scene;
 
+use crate::physics::scene::Scene;
 use crate::prelude::*;
 use async_std::sync::{Arc, Mutex};
-use physics::prelude::*;
 use std::time::{Duration, Instant};
 
 #[cfg(not(feature = "sync"))]

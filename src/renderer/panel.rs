@@ -19,7 +19,11 @@ impl Default for Panel {
 
 impl Panel {
     /// Returns a function that should be used once to update the panel and synchronize updated settings
-    pub fn update<'a>(&'a self, settings: &'a mut SimSettings) -> impl FnMut(&Context) + 'a {
+    pub fn update<'a>(
+        &'a self,
+        settings: &'a mut SimSettings,
+        retessellate: &'a mut bool,
+    ) -> impl FnMut(&Context) + 'a {
         |ctx: &Context| {
             let mut updated = false;
             let mut reset = false;
@@ -120,7 +124,7 @@ impl Panel {
                     .add(Slider::new(&mut settings.gap, 0.0..=3.0).text("Initial Gap"))
                     .changed();
 
-                updated |= ui
+                *retessellate |= ui
                     .add(Slider::new(&mut settings.radius, 0.0..=1.0).text("Radius"))
                     .changed();
 
@@ -171,7 +175,7 @@ impl Panel {
             // send to physics
             #[cfg(not(feature = "sync"))]
             {
-                if updated || reset {
+                if updated || reset || *retessellate {
                     ipc::physics_send(ToPhysics::Settings(*settings));
                 }
 
