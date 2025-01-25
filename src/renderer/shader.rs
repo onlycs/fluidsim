@@ -121,6 +121,12 @@ impl VsData {
 
         self.prims.push(VsCirclePrimitive {
             color: [1., 0., 0., 1.],
+            translate: [100., 0.],
+            z_index: 0,
+            _pad: 0,
+        });
+        self.prims.push(VsCirclePrimitive {
+            color: [0., 1., 0., 1.],
             translate: [0., 0.],
             z_index: 0,
             _pad: 0,

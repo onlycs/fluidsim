@@ -254,7 +254,7 @@ impl SimRenderer {
             pass.set_index_buffer(self.shader.index_buf.slice(..), wgpu::IndexFormat::Uint16);
             pass.set_vertex_buffer(0, self.shader.vertex_buf.slice(..));
 
-            pass.draw_indexed(0..self.shader.index_buf.size() as u32 / 2, 0, 0..1);
+            pass.draw_indexed(0..self.shader.index_buf.size() as u32 / 2, 0, 0..2);
         }
 
         self.wgpu.queue.submit(Some(encoder.finish()));
