@@ -1,6 +1,6 @@
 use core::fmt;
 use lyon::tessellation::TessellationError;
-use std::{backtrace::Backtrace, panic::Location};
+use std::{backtrace::Backtrace, io, panic::Location};
 use thiserror::Error;
 use wgpu::CreateSurfaceError;
 use winit::error::{EventLoopError, OsError};
@@ -53,6 +53,14 @@ pub enum RendererError {
 
     #[error("No adapter found")]
     NoAdapter,
+
+    #[error("At {location}: IO error:\n{source}")]
+    Io {
+        #[from]
+        source: io::Error,
+        location: &'static Location<'static>,
+        backtrace: Backtrace,
+    },
 }
 
 impl fmt::Debug for RendererError {

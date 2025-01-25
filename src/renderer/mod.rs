@@ -2,7 +2,7 @@ use crate::prelude::*;
 
 use egui::EguiState;
 use fps::{FpsCounter, FpsState};
-use panel::Panel;
+use panel::{Panel, UpdateData};
 use shader::VsState;
 use state::Game;
 use std::ops::{Deref, DerefMut};
@@ -194,7 +194,7 @@ impl SimRenderer {
         self.wgpu.init(window, &self.instance, size).await?;
         self.shader.init(&self.wgpu)?;
         self.egui.init(&self.wgpu);
-        self.fps.init(&self.wgpu);
+        self.fps.init(&self.wgpu)?;
 
         self.wgpu.window.set_min_inner_size(Some(MIN_WINDOW));
 
@@ -337,12 +337,40 @@ impl SimRenderer {
             #[cfg(feature = "sync")]
             let settings = &mut self.game.physics.settings;
 
+            let mut update = false;
+
+            cfg_if! {
+                if #[cfg(feature = "sync")] {
+                    let reset = &mut self.game.reset;
+                } else {
+                    let reset = &mut false;
+                }
+            };
+
             self.egui.draw(
                 &self.wgpu,
                 &mut encoder,
                 &surface_view,
-                self.panel.update(settings, &mut self.shader.retessellate),
+                self.panel.update(
+                    settings,
+                    UpdateData {
+                        update: &mut update,
+                        reset,
+                        retessellate: &mut self.shader.retessellate,
+                    },
+                ),
             );
+
+            #[cfg(not(feature = "sync"))]
+            {
+                if update || *reset || self.shader.retessellate {
+                    ipc::physics_send(ToPhysics::Settings(*settings));
+                }
+
+                if *reset {
+                    ipc::physics_send(ToPhysics::Reset);
+                }
+            }
         }
 
         self.wgpu.queue.submit(Some(encoder.finish()));

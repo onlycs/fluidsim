@@ -1,16 +1,12 @@
 use std::ops::{Deref, DerefMut};
 
-use crate::prelude::*;
-
-use egui::{Button, Context, RichText, Shadow, Slider};
+use egui::{Context, Shadow};
 use egui_wgpu::{Renderer, ScreenDescriptor};
 use egui_winit::{EventResponse, State};
 use wgpu::{CommandEncoder, TextureView};
 use winit::{event::WindowEvent, window::Window};
 
 use super::WgpuData;
-
-const TEXT_SIZE: f32 = 16.0;
 
 pub struct EguiTranslator {
     context: Context,

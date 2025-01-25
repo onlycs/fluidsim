@@ -17,17 +17,27 @@ impl Default for Panel {
     }
 }
 
+#[derive(Debug)]
+pub struct UpdateData<'a> {
+    pub update: &'a mut bool,
+    pub reset: &'a mut bool,
+    pub retessellate: &'a mut bool,
+}
+
 impl Panel {
     /// Returns a function that should be used once to update the panel and synchronize updated settings
     pub fn update<'a>(
         &'a self,
         settings: &'a mut SimSettings,
-        retessellate: &'a mut bool,
+        update: UpdateData<'a>,
     ) -> impl FnMut(&Context) + 'a {
-        |ctx: &Context| {
-            let mut updated = false;
-            let mut reset = false;
+        let UpdateData {
+            update,
+            reset,
+            retessellate,
+        } = update;
 
+        |ctx: &Context| {
             egui::Window::new("Simulation Settings").show(&ctx, |ui| {
                 if !self.show_self {
                     return;
@@ -35,18 +45,18 @@ impl Panel {
 
                 ui.label(RichText::new("GFX Settings").size(TEXT_SIZE).strong());
 
-                updated |= ui
+                *update |= ui
                     .add(Slider::new(&mut settings.fps, 50.0..=255.0).text("TPS"))
                     .changed();
 
                 ui.add_space(25.0);
                 ui.label(RichText::new("Physics Settings").size(TEXT_SIZE).strong());
 
-                updated |= ui
+                *update |= ui
                     .add(Slider::new(&mut settings.gravity, -20.0..=20.0).text("Gravity"))
                     .changed();
 
-                updated |= ui
+                *update |= ui
                     .add(
                         Slider::new(&mut settings.collision_dampening, 0.0..=1.0)
                             .text("Collision Dampening"),
@@ -56,28 +66,28 @@ impl Panel {
                 ui.add_space(25.0);
                 ui.label(RichText::new("SPH Settings").size(TEXT_SIZE).strong());
 
-                updated |= ui
+                *update |= ui
                     .add(
                         Slider::new(&mut settings.smoothing_radius, 0.01..=4.0)
                             .text("Smoothing Radius"),
                     )
                     .changed();
 
-                updated |= ui
+                *update |= ui
                     .add(
                         Slider::new(&mut settings.target_density, 0.0..=200.0)
                             .text("Target Density"),
                     )
                     .changed();
 
-                updated |= ui
+                *update |= ui
                     .add(
                         Slider::new(&mut settings.pressure_multiplier, 0.0..=300.0)
                             .text("Pressure Multiplier"),
                     )
                     .changed();
 
-                updated |= ui
+                *update |= ui
                     .add(
                         Slider::new(&mut settings.viscosity_strength, 0.0..=1.0)
                             .text("Viscosity Strength"),
@@ -87,14 +97,14 @@ impl Panel {
                 ui.add_space(25.0);
                 ui.label(RichText::new("Mouse Settings").size(TEXT_SIZE).strong());
 
-                updated |= ui
+                *update |= ui
                     .add(
                         Slider::new(&mut settings.interaction_radius, 0.0..=10.0)
                             .text("Interaction Radius"),
                     )
                     .changed();
 
-                updated |= ui
+                *update |= ui
                     .add(
                         Slider::new(&mut settings.interaction_strength, 0.0..=100.0)
                             .text("Interaction Strength"),
@@ -104,7 +114,7 @@ impl Panel {
                 ui.add_space(25.0);
                 ui.label(RichText::new("Initial Conditions").size(TEXT_SIZE).strong());
 
-                reset |= ui
+                *reset |= ui
                     .add(
                         Slider::new(&mut settings.particles.x, 1.0..=100.0)
                             .integer()
@@ -112,7 +122,7 @@ impl Panel {
                     )
                     .changed();
 
-                reset |= ui
+                *reset |= ui
                     .add(
                         Slider::new(&mut settings.particles.y, 1.0..=100.0)
                             .integer()
@@ -120,7 +130,7 @@ impl Panel {
                     )
                     .changed();
 
-                reset |= ui
+                *reset |= ui
                     .add(Slider::new(&mut settings.gap, 0.0..=3.0).text("Initial Gap"))
                     .changed();
 
@@ -135,7 +145,7 @@ impl Panel {
                     .add_sized([180., 30.], Button::new("Default Settings"))
                     .clicked()
                 {
-                    reset = true;
+                    *reset = true;
                     *settings = Default::default();
                 }
 
@@ -143,7 +153,7 @@ impl Panel {
                     .add_sized([180., 30.], Button::new("Zero Gravity"))
                     .clicked()
                 {
-                    reset = true;
+                    *reset = true;
                     *settings = SimSettings::zero_gravity();
                 }
 
@@ -171,18 +181,6 @@ impl Panel {
 
             settings.particles.x = settings.particles.x.round();
             settings.particles.y = settings.particles.y.round();
-
-            // send to physics
-            #[cfg(not(feature = "sync"))]
-            {
-                if updated || reset || *retessellate {
-                    ipc::physics_send(ToPhysics::Settings(*settings));
-                }
-
-                if reset {
-                    ipc::physics_send(ToPhysics::Reset);
-                }
-            }
         }
     }
 

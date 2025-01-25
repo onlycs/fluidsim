@@ -59,7 +59,10 @@ impl Default for SimSettings {
             interaction_strength: 90.0,
 
             // window size
+            #[cfg(not(target_arch = "wasm32"))]
             window_size: Vec2::new(1200., 800.),
+            #[cfg(target_arch = "wasm32")]
+            window_size: Vec2::new(1500., 1000.),
 
             mass: 1.0,
         }

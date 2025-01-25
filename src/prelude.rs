@@ -1,12 +1,7 @@
-pub(crate) use crate::{
-    error::{self, *},
-    ipc::{
-        self,
-        shared::{self, *},
-        ToPhysics,
-    },
-    physics,
-};
+pub(crate) use crate::{error::*, ipc::shared::*, physics};
+
+#[cfg(not(feature = "sync"))]
+pub(crate) use crate::ipc::{self, ToPhysics};
 
 pub use std::sync::Arc;
 

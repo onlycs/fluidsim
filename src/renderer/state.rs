@@ -6,8 +6,18 @@ use physics::PhysicsWorkerThread;
 
 cfg_if! {
     if #[cfg(feature = "sync")] {
+        #[derive(Default)]
+        pub struct PauseState {
+            pub paused: bool,
+            pub step: bool,
+        }
+
+
         pub struct Game {
             pub physics: Scene,
+
+            pub pause: PauseState,
+            pub reset: bool,
         }
     } else {
         pub struct Game {
@@ -23,7 +33,9 @@ impl Game {
         cfg_if! {
             if #[cfg(feature = "sync")] {
                 Self {
-                    physics: Scene::new()
+                    physics: Scene::new(),
+                    pause: PauseState::default(),
+                    reset: false,
                 }
             } else {
                 Self {

@@ -1,8 +1,10 @@
-use std::ops::{Deref, DerefMut};
+use std::{
+    io,
+    ops::{Deref, DerefMut},
+};
 
 use super::WgpuData;
 use crate::prelude::*;
-use egui::FontFamily;
 use glyphon::{
     Attrs, Buffer, Cache, Color, FontSystem, Metrics, Resolution, SwashCache, TextArea, TextAtlas,
     TextBounds, TextRenderer, Viewport,
@@ -26,7 +28,7 @@ pub struct FpsCounter {
 }
 
 impl FpsCounter {
-    pub fn new(wgpu: &WgpuData) -> Self {
+    pub fn new(wgpu: &WgpuData) -> Result<Self, io::Error> {
         let size = wgpu.window.inner_size();
         let scale = wgpu.window.scale_factor() as f32;
 
@@ -49,7 +51,12 @@ impl FpsCounter {
             Some(size.height as f32 * scale),
         );
 
-        Self {
+        // wasm has no fonts according to cosmic, but include anyways cuz i like jbm
+        font_system
+            .db_mut()
+            .load_font_data(include_bytes!("../../font/JetBrainsMono-Light.ttf").to_vec());
+
+        Ok(Self {
             font_system,
             swash_cache,
             viewport,
@@ -60,7 +67,7 @@ impl FpsCounter {
             timer: Instant::now(),
             frames: 0,
             last_fps: 0.,
-        }
+        })
     }
 
     pub fn update(&mut self) {
@@ -99,7 +106,7 @@ impl FpsCounter {
         buffer.set_text(
             font_system,
             format!("FPS: {:.2}", self.last_fps).as_str(),
-            Attrs::new().family(glyphon::Family::Monospace),
+            Attrs::new().family(glyphon::Family::Name("JetBrains Mono")),
             glyphon::Shaping::Advanced,
         );
 
@@ -169,8 +176,10 @@ impl FpsState {
         self.0.is_none()
     }
 
-    pub fn init(&mut self, wgpu: &WgpuData) {
-        self.0 = Some(FpsCounter::new(wgpu));
+    pub fn init(&mut self, wgpu: &WgpuData) -> Result<(), io::Error> {
+        self.0 = Some(FpsCounter::new(wgpu)?);
+
+        Ok(())
     }
 }
 

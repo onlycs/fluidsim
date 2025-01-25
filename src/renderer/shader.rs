@@ -84,6 +84,7 @@ impl StrokeVertexConstructor<VsInput> for WithId {
     }
 }
 
+#[allow(unused)]
 pub struct VsData {
     pub globals: VsGlobals,
     pub prims: Vec<VsCirclePrimitive>,
