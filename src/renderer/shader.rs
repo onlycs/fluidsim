@@ -135,14 +135,14 @@ impl VsData {
 }
 
 #[derive(Default)]
-pub struct VsState(pub Option<VsData>);
+pub struct VsState(Option<VsData>);
 
 impl VsState {
     pub fn uninit(&self) -> bool {
         self.0.is_none()
     }
 
-    pub fn create(&mut self, wgpu: &WgpuState) -> Result<(), TessellationError> {
+    pub fn init(&mut self, wgpu: &WgpuState) -> Result<(), TessellationError> {
         let mut tesselation_buf: VertexBuffers<_, u16> = VertexBuffers::new();
         let mut tessellator = FillTessellator::new();
 

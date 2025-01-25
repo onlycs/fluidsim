@@ -1,5 +1,7 @@
 use crate::prelude::*;
 
+use egui::EguiState;
+use panel::Panel;
 use shader::VsState;
 use state::Game;
 use std::ops::{Deref, DerefMut};
@@ -12,6 +14,8 @@ use winit::{
     window::{Window, WindowId},
 };
 
+mod egui;
+mod panel;
 mod shader;
 mod state;
 
@@ -23,54 +27,20 @@ pub struct WgpuData {
     config: wgpu::SurfaceConfiguration,
 }
 
+#[derive(Default)]
 pub struct WgpuState(Option<WgpuData>);
 
 impl WgpuState {
     pub fn uninit(&self) -> bool {
         self.0.is_none()
     }
-}
 
-impl Deref for WgpuState {
-    type Target = WgpuData;
-
-    #[track_caller]
-    fn deref(&self) -> &Self::Target {
-        unsafe { self.0.as_ref().unwrap_unchecked() }
-    }
-}
-
-impl DerefMut for WgpuState {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { self.0.as_mut().unwrap_unchecked() }
-    }
-}
-
-pub struct SimRenderer {
-    instance: wgpu::Instance,
-    wgpu: WgpuState,
-    shader: VsState,
-
-    game: state::Game,
-}
-
-impl SimRenderer {
-    pub fn new() -> Self {
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::from_env_or_default());
-
-        Self {
-            instance,
-            wgpu: WgpuState(None),
-            game: Game::new(),
-            shader: VsState::default(),
-        }
-    }
-
-    async fn init_static(
+    pub async fn init(
+        &mut self,
         window: Window,
         instance: &wgpu::Instance,
         window_size: Vec2,
-    ) -> Result<WgpuData, RendererError> {
+    ) -> Result<(), RendererError> {
         info!("Initializing renderer");
 
         let window = Arc::new(window);
@@ -152,13 +122,59 @@ impl SimRenderer {
                 .unwrap();
         }
 
-        Ok(WgpuData {
+        self.0 = Some(WgpuData {
             surface,
             device,
             queue,
             config: surface_cfg,
             window,
-        })
+        });
+
+        Ok(())
+    }
+}
+
+impl Deref for WgpuState {
+    type Target = WgpuData;
+
+    #[track_caller]
+    fn deref(&self) -> &Self::Target {
+        unsafe { self.0.as_ref().unwrap_unchecked() }
+    }
+}
+
+impl DerefMut for WgpuState {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { self.0.as_mut().unwrap_unchecked() }
+    }
+}
+
+pub struct SimRenderer {
+    instance: wgpu::Instance,
+    wgpu: WgpuState,
+    shader: VsState,
+    egui: EguiState,
+    panel: Panel,
+
+    game: state::Game,
+}
+
+impl SimRenderer {
+    pub fn new() -> Self {
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::from_env_or_default());
+
+        Self {
+            instance,
+            wgpu: WgpuState::default(),
+            game: Game::new(),
+            shader: VsState::default(),
+            egui: EguiState::default(),
+            panel: Panel::default(),
+        }
+    }
+
+    fn uninit(&self) -> bool {
+        self.wgpu.uninit() || self.egui.uninit() || self.shader.uninit()
     }
 
     async fn init(&mut self, window: Window) -> Result<(), RendererError> {
@@ -170,8 +186,9 @@ impl SimRenderer {
             }
         };
 
-        self.wgpu = WgpuState(Some(Self::init_static(window, &self.instance, size).await?));
-        self.shader.create(&self.wgpu)?;
+        self.wgpu.init(window, &self.instance, size).await?;
+        self.shader.init(&self.wgpu)?;
+        self.egui.init(&self.wgpu);
 
         Ok(())
     }
@@ -189,6 +206,15 @@ impl SimRenderer {
 
         self.wgpu.config.width = size.x as u32;
         self.wgpu.config.height = size.y as u32;
+
+        self.wgpu
+            .surface
+            .configure(&self.wgpu.device, &self.wgpu.config);
+
+        #[cfg(not(feature = "sync"))]
+        {
+            ipc::physics_send(ToPhysics::Settings(self.game.config));
+        }
     }
 
     fn draw(&mut self) -> Result<(), DrawError> {
@@ -216,10 +242,6 @@ impl SimRenderer {
         });
 
         self.shader.update()?;
-
-        if self.shader.uninit() {
-            self.shader.create(&self.wgpu)?;
-        }
 
         self.wgpu.queue.write_buffer(
             &self.shader.globals_buf,
@@ -257,6 +279,23 @@ impl SimRenderer {
             pass.draw_indexed(0..self.shader.index_buf.size() as u32 / 2, 0, 0..2);
         }
 
+        {
+            cfg_if! {
+                if #[cfg(feature = "sync")] {
+                    let settings = &mut self.game.physics.settings;
+                } else {
+                    let settings = &mut self.game.config;
+                }
+            };
+
+            self.egui.draw(
+                &self.wgpu,
+                &mut encoder,
+                &surface_view,
+                self.panel.update(settings),
+            );
+        }
+
         self.wgpu.queue.submit(Some(encoder.finish()));
         surface_tex.present();
 
@@ -271,11 +310,15 @@ impl ApplicationHandler for SimRenderer {
         window_id: WindowId,
         event: WindowEvent,
     ) {
-        if self.wgpu.uninit() {
+        if self.uninit() {
             return;
         }
 
-        match event {
+        if self.egui.event(&self.wgpu.window, &event).consumed {
+            return;
+        }
+
+        match &event {
             WindowEvent::CloseRequested => {
                 info!("Got close request, quitting!");
                 event_loop.exit()
