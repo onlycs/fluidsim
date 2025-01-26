@@ -14,7 +14,7 @@ use winit::{
     event::WindowEvent,
     event_loop::ActiveEventLoop,
     keyboard::KeyCode,
-    window::{Fullscreen, Window, WindowId},
+    window::{Window, WindowId},
 };
 
 mod egui;
@@ -113,13 +113,41 @@ impl WgpuState {
 
         #[cfg(target_arch = "wasm32")]
         {
+            use wasm_bindgen::prelude::Closure;
+            use wasm_bindgen::JsCast;
+            use web_sys::Event;
             use winit::platform::web::WindowExtWebSys;
+
             web_sys::window()
                 .and_then(|win| win.document())
                 .and_then(|doc| {
                     let dest = doc.get_element_by_id("fluidsim")?;
                     let canvas = web_sys::Element::from(window.canvas()?);
                     dest.append_child(&canvas).ok()?;
+                    Some(doc)
+                })
+                .and_then(|doc| {
+                    let canvas = doc.query_selector("canvas").ok()??;
+
+                    canvas
+                        .add_event_listener_with_callback(
+                            "click",
+                            Closure::wrap(Box::new(|_| {
+                                // set w and h of canvas to 100vw and 100vh, after click
+
+                                let window = web_sys::window().unwrap();
+                                let document = window.document().unwrap();
+                                let canvas = document.query_selector("canvas").unwrap().unwrap();
+
+                                canvas
+                                    .set_attribute("style", "width: 100vw; height: 100vh;")
+                                    .unwrap();
+                            }) as Box<dyn FnMut(Event)>)
+                            .as_ref()
+                            .unchecked_ref(),
+                        )
+                        .ok()?;
+
                     Some(())
                 })
                 .unwrap();
@@ -197,7 +225,7 @@ impl SimRenderer {
         #[cfg(not(target_arch = "wasm32"))]
         self.wgpu
             .window
-            .set_fullscreen(Some(Fullscreen::Borderless(None)));
+            .set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
 
         #[cfg(target_arch = "wasm32")]
         self.wgpu.window.set_min_inner_size(Some(WASM_WINDOW));

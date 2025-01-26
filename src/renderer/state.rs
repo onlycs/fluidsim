@@ -54,8 +54,9 @@ impl Game {
             let el = self.time.last_instant.elapsed().as_secs_f32();
             let speed = self.physics.settings.speed;
             let sspf = self.physics.settings.steps_per_frame;
+            let maxed = (el * speed / sspf as f32).min(1. / 90.);
 
-            self.physics.settings.dtime = el * speed / sspf as f32;
+            self.physics.settings.dtime = maxed;
         }
 
         self.time.last_instant = Instant::now();
