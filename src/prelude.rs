@@ -18,7 +18,7 @@ pub use std::time::Instant;
 pub use web_time::Instant;
 
 #[cfg(target_arch = "wasm32")]
-pub const WASM_WINDOW: PhysicalSize<u32> = PhysicalSize::new(1500, 1000);
+pub const WASM_WINDOW: PhysicalSize<u32> = PhysicalSize::new(1300, 700);
 
 pub trait ToVec2 {
     fn to_vec2(&self) -> Vec2;
