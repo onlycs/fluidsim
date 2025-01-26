@@ -69,7 +69,8 @@ impl Game {
                 .last_instant
                 .elapsed()
                 .as_secs_f32()
-                .min(dtime_target);
+                .max(dtime_target)
+                .min(1. / 90.);
         }
 
         self.time.last_instant = Instant::now();

@@ -2,7 +2,7 @@ use crate::prelude::*;
 
 use egui::EguiState;
 use fps::{FpsCounter, FpsState};
-use keyboard::KeyboardHelper;
+use input::{InputHelper, InputResponse};
 use panel::{Panel, UpdateData};
 use shader::VsState;
 use state::Game;
@@ -19,7 +19,7 @@ use winit::{
 
 mod egui;
 mod fps;
-mod keyboard;
+mod input;
 mod panel;
 mod shader;
 mod state;
@@ -156,11 +156,12 @@ pub struct SimRenderer {
     instance: wgpu::Instance,
     wgpu: WgpuState,
     shader: VsState,
+
     egui: EguiState,
     panel: Panel,
-    fps: FpsState,
-    inputs: KeyboardHelper,
 
+    fps: FpsState,
+    input: InputHelper,
     game: state::Game,
 }
 
@@ -176,7 +177,7 @@ impl SimRenderer {
             shader: VsState::default(),
             egui: EguiState::default(),
             panel: Panel::default(),
-            inputs: KeyboardHelper::default(),
+            input: InputHelper::default(),
         }
     }
 
@@ -395,51 +396,78 @@ impl ApplicationHandler for SimRenderer {
             return;
         }
 
-        if self.inputs.process(&event) {
-            for key in self.inputs.keydown() {
-                match key {
-                    KeyCode::Escape => {
-                        info!("Got escape, quitting!");
-                        event_loop.exit();
-                    }
-                    KeyCode::Space => {
-                        cfg_if! {
-                            if #[cfg(feature = "sync")] {
-                                self.game.time.paused = !self.game.time.paused;
-                            } else {
-                                ipc::physics_send(ToPhysics::Pause);
-                            }
-                        };
-                    }
-                    KeyCode::ArrowRight => {
-                        cfg_if! {
-                            if #[cfg(feature = "sync")] {
-                                if self.game.time.paused {
-                                    self.game.time.step = true;
+        match self.input.process(&event) {
+            InputResponse::Keyboard => {
+                for key in self.input.keydown() {
+                    match key {
+                        KeyCode::Escape => {
+                            info!("Got escape, quitting!");
+                            event_loop.exit();
+                        }
+                        KeyCode::Space => {
+                            cfg_if! {
+                                if #[cfg(feature = "sync")] {
+                                    self.game.time.paused = !self.game.time.paused;
+                                } else {
+                                    ipc::physics_send(ToPhysics::Pause);
                                 }
-                            } else {
-                                ipc::physics_send(ToPhysics::Step);
-                            }
-                        };
-                    }
-                    KeyCode::KeyR => {
-                        cfg_if! {
-                            if #[cfg(feature = "sync")] {
-                                self.game.reset = true;
-                            } else {
-                                ipc::physics_send(ToPhysics::Reset);
+                            };
+                        }
+                        KeyCode::ArrowRight => {
+                            cfg_if! {
+                                if #[cfg(feature = "sync")] {
+                                    if self.game.time.paused {
+                                        self.game.time.step = true;
+                                    }
+                                } else {
+                                    ipc::physics_send(ToPhysics::Step);
+                                }
+                            };
+                        }
+                        KeyCode::KeyR => {
+                            cfg_if! {
+                                if #[cfg(feature = "sync")] {
+                                    self.game.reset = true;
+                                } else {
+                                    ipc::physics_send(ToPhysics::Reset);
+                                }
                             }
                         }
+                        KeyCode::KeyC => {
+                            self.panel.toggle();
+                        }
+                        KeyCode::KeyH => {
+                            self.panel.toggle_help();
+                        }
+                        _ => {}
                     }
-                    KeyCode::KeyC => {
-                        self.panel.toggle();
-                    }
-                    KeyCode::KeyH => {
-                        self.panel.toggle_help();
-                    }
-                    _ => {}
                 }
             }
+            InputResponse::Mouse => {
+                let (x, y) = self.input.mouse_pos;
+
+                let state = MouseState {
+                    px: [x, y].into(),
+                    left: self.input.lmb,
+                    right: self.input.rmb,
+                };
+
+                cfg_if! {
+                    if #[cfg(feature = "sync")] {
+                        let old_state = &mut self.game.physics.mouse;
+                    } else {
+                        let old_state = &mut self.game.mouse;
+                    }
+                }
+
+                if state.active() || old_state.active() {
+                    *old_state = state;
+
+                    #[cfg(not(feature = "sync"))]
+                    ipc::physics_send(ToPhysics::UpdateMouse(state));
+                }
+            }
+            _ => {}
         }
 
         match &event {

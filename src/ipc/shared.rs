@@ -51,7 +51,11 @@ impl Default for SimSettings {
             pressure_multiplier: 150.0,
             viscosity_strength: 0.06,
 
+            #[cfg(not(target_arch = "wasm32"))]
             particles: Vec2::new(80., 80.),
+            #[cfg(target_arch = "wasm32")]
+            particles: Vec2::new(50., 50.),
+
             gap: 0.05,
             radius: 0.035,
 
@@ -78,10 +82,18 @@ pub struct MouseState {
 
 impl MouseState {
     pub fn intensity(&self) -> f32 {
+        if !self.active() {
+            return 0.0;
+        }
+
         if self.left {
             1.0
         } else {
             -1.0
         }
+    }
+
+    pub fn active(&self) -> bool {
+        self.left || self.right
     }
 }

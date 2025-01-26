@@ -1,19 +1,72 @@
 <!doctype html>
 <html lang="en-US">
+	<head>
+		<meta charset="utf-8" />
+		<title>Fluid Simulation</title>
+		<script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+	</head>
 
-<head>
-	<meta charset="utf-8" />
-	<title>Fluid Simulation</title>
-</head>
+	<body
+		id="fluidsim"
+		class="w-screen h-screen flex items-center justify-center flex-col m-0"
+		style="background-color: #2a2a2a;">
 
-<body id="fluidsim"
-	style="background-color: #2a2a2a; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; margin: 0;">
-	<script type="module">
-		import init from "./pkg/fluidsim.js";
-		init().then(() => {
-			console.log("loaded!");
-		});
-	</script>
-</body>
+		<script type="module">
+			import init from "./pkg/fluidsim.js";
 
+			document.getElementById("help").style.display = "none";
+
+
+			// the canvas will be created by wasm.
+			// when it is created, add a listener
+			setTimeout(() => {
+				document.getElementById("onboard-help").style.display = "block";
+				document.querySelectorAll("canvas")[0].addEventListener("click", (e) => {
+					document.getElementById("onboard-help").style.display = "none";
+				});
+			}, 250);
+
+			init()
+				.then(() => {
+					console.log("loaded!");
+				})
+				.catch(() => {
+					console.log("failure?");
+
+					setTimeout(() => {
+						if (document.querySelectorAll("canvas").length == 0) {
+							document.getElementById("help").style.display = "block";
+							document.getElementById("onboard-help").style.display = "none";
+						}
+					}, 250)
+				});
+		</script>
+
+		<p id="help" class="mb-4 text-white text-2xl text-center">
+			This does not work on Firefox at the moment. <br>
+			You need extra steps to make this work on chrome. <br>
+
+			Go to
+			<span style="background-color: #101010;"
+				class="py-1 pl-2 pr-1 rounded-sm text-xl">
+				chrome://flags
+			</span>, search for and enable
+
+			<br>
+			<span style="background-color: #101010;"
+				class="py-1 pl-2 pr-1 rounded-sm text-xl">
+				Unsafe WebGPU Support
+			</span>, then restart your browser.
+
+			<br><br>
+			I hope this goes without saying:<br>
+			this will not work on a phone<br>
+		</p>
+
+		<p id="onboard-help" class="mb-4 text-white text-2xl text-center"
+			style="display: none;">
+			Click on the window, then click space to start.
+			You can interact with the mouse.
+		</p>
+	</body>
 </html>

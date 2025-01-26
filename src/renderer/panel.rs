@@ -43,10 +43,10 @@ impl Panel {
             }
 
             egui::Window::new("Simulation Settings").show(&ctx, |ui| {
-                ui.label(RichText::new("GFX Settings").size(TEXT_SIZE).strong());
+                ui.label(RichText::new("Graphics Settings").size(TEXT_SIZE).strong());
 
                 *update |= ui
-                    .add(Slider::new(&mut settings.fps, 50.0..=255.0).text("TPS"))
+                    .add(Slider::new(&mut settings.fps, 100.0..=384.0).text("TPS"))
                     .changed();
 
                 ui.add_space(25.0);
@@ -146,7 +146,10 @@ impl Panel {
                     .clicked()
                 {
                     *reset = true;
-                    *settings = Default::default();
+                    *settings = SimSettings {
+                        window_size: settings.window_size,
+                        ..SimSettings::default()
+                    }
                 }
 
                 if ui
@@ -154,15 +157,21 @@ impl Panel {
                     .clicked()
                 {
                     *reset = true;
-                    *settings = SimSettings::zero_gravity();
+                    *settings = SimSettings {
+                        window_size: settings.window_size,
+                        ..SimSettings::zero_gravity()
+                    };
                 }
 
                 if self.show_help {
                     ui.add_space(10.0);
                     ui.label("Press space to pause/play the simulation");
                     ui.label("Press the right arrow to step the simulation");
+                    ui.label("Use the left mouse button to pull particles");
+                    ui.label("Use the right mouse button to push particles");
+                    ui.label("Press 'R' to restart");
                     ui.label("Press 'C' to toggle this panel");
-                    ui.label("Press 'H' to toggle the help text");
+                    ui.label("Press 'H' to toggle this help text");
                 }
             });
 
