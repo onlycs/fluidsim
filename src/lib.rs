@@ -34,6 +34,7 @@ cfg_if! {
         extern crate wasm_bindgen;
         extern crate wasm_bindgen_futures;
         extern crate web_sys;
+        extern crate web_time;
 
         use wasm_bindgen::prelude::*;
     }
@@ -52,13 +53,17 @@ use error::InitError;
 use renderer::SimRenderer;
 use winit::event_loop::EventLoop;
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
-pub fn run() {
-    main().unwrap()
-}
+cfg_if! {
+    if #[cfg(target_arch = "wasm32")] {
+        #[wasm_bindgen(start)]
+        pub fn run() {
+            main().unwrap();
+        }
 
-#[cfg(all(target_arch = "wasm32", not(feature = "sync")))]
-compile_error!("`sync` feature must be turned on for wasm32 support");
+        #[cfg(not(feature = "sync"))]
+        compile_error!("`sync` feature must be turned on for wasm32 support");
+    }
+}
 
 pub fn main() -> Result<(), InitError> {
     cfg_if! {
