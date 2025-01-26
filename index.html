@@ -14,8 +14,6 @@
 		<script type="module">
 			import init from "./pkg/fluidsim.js";
 
-			document.getElementById("help").style.display = "none";
-
 			init()
 				.then(() => {
 					console.log("loaded!");
@@ -28,11 +26,12 @@
 							document.getElementById("help").style.display = "block";
 							document.getElementById("onboard-help").style.display = "none";
 						}
-					}, 250)
+					}, 500)
 				});
 		</script>
 
-		<p id="help" class="mb-4 text-white text-2xl text-center">
+		<p id="help" class="mb-4 text-white text-2xl text-center"
+			style="display: none;">
 			This does not work on Firefox at the moment. <br>
 			You need extra steps to make this work on chrome. <br>
 
