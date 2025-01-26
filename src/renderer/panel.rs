@@ -38,11 +38,11 @@ impl Panel {
         } = update;
 
         |ctx: &Context| {
-            egui::Window::new("Simulation Settings").show(&ctx, |ui| {
-                if !self.show_self {
-                    return;
-                }
+            if !self.show_self {
+                return;
+            }
 
+            egui::Window::new("Simulation Settings").show(&ctx, |ui| {
                 ui.label(RichText::new("GFX Settings").size(TEXT_SIZE).strong());
 
                 *update |= ui

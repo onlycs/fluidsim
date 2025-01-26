@@ -479,7 +479,7 @@ impl ApplicationHandler for SimRenderer {
                     let ptr = self as *mut _;
                     let num = ptr as usize;
 
-                    wasm_bindgen_futures::block_on(async move {
+                    wasm_bindgen_futures::spawn_local(async move {
                         let ptr = num as *mut Self;
                         let this = unsafe { &mut *ptr };
 

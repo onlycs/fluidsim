@@ -90,6 +90,7 @@ impl PhysicsWorkerThread {
     }
 }
 
+#[cfg(not(feature = "sync"))]
 impl Drop for PhysicsWorkerThread {
     fn drop(&mut self) {
         // properly drop self.render (the os likes when we give it back memory)
