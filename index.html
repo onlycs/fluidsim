@@ -16,18 +16,6 @@
 
 			document.getElementById("help").style.display = "none";
 
-
-			// the canvas will be created by wasm.
-			// when it is created, add a listener
-			setTimeout(() => {
-				document.getElementById("onboard-help").style.display = "block";
-				document.querySelectorAll("canvas")[0].addEventListener("click", (e) => {
-					document.getElementById("onboard-help").style.display = "none";
-					document.querySelector("canvas").style.width = "100vw";
-					document.querySelector("canvas").style.height = "100vh";
-				});
-			}, 250);
-
 			init()
 				.then(() => {
 					console.log("loaded!");
