@@ -1,11 +1,11 @@
 {
-	"rust-analyzer.cargo.target": "wasm32-unknown-unknown",
-	"rust-analyzer.cargo.features": [
-		"sync"
-	],
-	"rust-analyzer.check.features": [
-		"sync"
-	],
-	// "rust-analyzer.cargo.features": [],
-	// "rust-analyzer.check.features": [],
+	// "rust-analyzer.cargo.target": "wasm32-unknown-unknown",
+	// "rust-analyzer.cargo.features": [
+	// 	"sync"
+	// ],
+	// "rust-analyzer.check.features": [
+	// 	"sync"
+	// ],
+	"rust-analyzer.cargo.features": [],
+	"rust-analyzer.check.features": [],
 }

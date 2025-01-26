@@ -1,5 +1,8 @@
 [package]
 name = "fluidsim_exec"
+description = "A fluid simulation"
+license = "AGPL-3.0"
+repository = "https://github.com/onlycs/fluidsim"
 version = "0.1.0"
 edition = "2021"
 

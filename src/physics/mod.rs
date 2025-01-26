@@ -1,11 +1,15 @@
 pub mod scene;
 
-use crate::physics::scene::Scene;
-use crate::prelude::*;
-use std::{
-    thread::{self},
-    time::{Duration, Instant},
-};
+cfg_if! {
+    if #[cfg(not(feature = "sync"))] {
+        use crate::physics::scene::Scene;
+        use crate::prelude::*;
+        use std::{
+            thread::{self},
+            time::{Duration, Instant},
+        };
+    }
+}
 
 #[cfg(not(feature = "sync"))]
 pub struct PhysicsWorkerThread {

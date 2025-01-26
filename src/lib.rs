@@ -42,6 +42,7 @@ cfg_if! {
 mod error;
 mod gradient;
 mod ipc;
+#[cfg(not(target_arch = "wasm32"))]
 mod logger;
 mod physics;
 mod prelude;
