@@ -1,0 +1,63 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Load target cache
+        uses: actions/cache/restore@v4
+        id: cache-restore
+        with:
+          path: |
+            /home/runner/work/fluidsim/fluidsim/target
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-rust-cache-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-rust-cache
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          default: true
+          override: true
+
+      - name: Build
+        run: wasm-pack build --target web --release
+
+      - name: Move files around
+        run: |
+          mkdir dist
+          mv pkg dist/
+          mv index.html dist/
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+
+      - name: Save target cache
+        if: always() && (steps.cache-restore.outputs.cache-hit != 'true' || steps.cache-restore.outputs.cache-primary-key == '${{ runner.os }}-rust-cache')
+        uses: actions/cache/save@v4
+        with:
+          path: | 
+            /home/runner/work/attendance/attendance/src-api/target
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-rust-cache-${{ hashFiles('**/Cargo.lock') }}
