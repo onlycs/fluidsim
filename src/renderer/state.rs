@@ -1,82 +1,70 @@
 use crate::prelude::*;
 
-#[cfg(not(feature = "sync"))]
-use physics::PhysicsWorkerThread;
+pub struct TimeState {
+    paused: bool,
+    step: bool,
+    last_instant: Instant,
+}
 
-#[cfg(feature = "sync")]
-use physics::scene::Scene;
+impl TimeState {
+    pub fn play_pause(&mut self) {
+        self.paused = !self.paused;
+        self.last_instant = Instant::now();
+    }
 
-cfg_if! {
-    if #[cfg(feature = "sync")] {
-        pub struct TimeState {
-            pub paused: bool,
-            pub step: bool,
-            pub last_instant: Instant,
-        }
-
-        pub struct Game {
-            pub physics: Scene,
-
-            pub time: TimeState,
-            pub reset: bool,
-        }
-    } else {
-        pub struct Game {
-            pub physics: PhysicsWorkerThread,
-            pub mouse: MouseState,
-            pub config: SimSettings,
+    pub fn step(&mut self) {
+        if self.paused {
+            self.step = true;
+        } else {
+            warn!("Cannot step while not paused");
         }
     }
 }
 
+pub struct Game {
+    pub physics: Scene,
+
+    pub time: TimeState,
+    pub reset: bool,
+}
+
 impl Game {
     pub fn new() -> Self {
-        cfg_if! {
-            if #[cfg(feature = "sync")] {
-                Self {
-                    physics: Scene::new(),
-                    time: TimeState {
-                        paused: true,
-                        step: false,
-                        last_instant: Instant::now()
-                    },
-                    reset: false,
-                }
-            } else {
-                Self {
-                    physics: PhysicsWorkerThread::new(),
-                    mouse: MouseState::default(),
-                    config: SimSettings::default(),
-                }
-            }
+        Self {
+            physics: Scene::new(),
+            time: TimeState {
+                paused: true,
+                step: false,
+                last_instant: Instant::now(),
+            },
+            reset: false,
         }
     }
 
-    #[cfg(feature = "sync")]
     pub fn update(&mut self) {
         if self.reset {
             self.physics.reset();
             self.reset = false;
+            self.time.paused = true;
         }
 
-        let dtime_target = 1. / self.physics.settings.fps;
-
         if self.time.step {
-            self.physics.settings.dtime = dtime_target;
+            self.physics.settings.dtime = self.physics.settings.step_time / 1e3;
         } else {
-            self.physics.settings.dtime = self
-                .time
-                .last_instant
-                .elapsed()
-                .as_secs_f32()
-                .max(dtime_target)
-                .min(1. / 90.);
+            let el = self.time.last_instant.elapsed().as_secs_f32();
+            let speed = self.physics.settings.speed;
+            let sspf = self.physics.settings.steps_per_frame;
+
+            self.physics.settings.dtime = el * speed / sspf as f32;
         }
 
         self.time.last_instant = Instant::now();
 
         if !self.time.paused || self.time.step {
-            self.physics.update();
+            for _ in 0..self.physics.settings.steps_per_frame {
+                self.physics.update();
+            }
+
             self.time.step = false;
         }
     }

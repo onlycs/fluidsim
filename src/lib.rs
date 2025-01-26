@@ -17,7 +17,6 @@ extern crate egui;
 extern crate egui_wgpu;
 extern crate glam;
 extern crate itertools;
-extern crate lazy_static;
 extern crate lyon;
 extern crate pollster;
 extern crate rand;
@@ -42,12 +41,12 @@ cfg_if! {
 
 mod error;
 mod gradient;
-mod ipc;
 #[cfg(not(target_arch = "wasm32"))]
 mod logger;
 mod physics;
 mod prelude;
 mod renderer;
+mod state;
 
 use error::InitError;
 use renderer::SimRenderer;
@@ -59,9 +58,6 @@ cfg_if! {
         pub fn run() {
             main().unwrap();
         }
-
-        #[cfg(not(feature = "sync"))]
-        compile_error!("`sync` feature must be turned on for wasm32 support");
     }
 }
 

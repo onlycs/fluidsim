@@ -9,7 +9,6 @@ use lyon::{
         StrokeVertex, StrokeVertexConstructor, TessellationError, VertexBuffers,
     },
 };
-use physics::scene::Scene;
 use wgpu::{util::DeviceExt, BindGroupLayoutDescriptor, Color};
 
 use super::WgpuData;

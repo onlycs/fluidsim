@@ -14,7 +14,7 @@ use winit::{
     event::WindowEvent,
     event_loop::ActiveEventLoop,
     keyboard::KeyCode,
-    window::{Window, WindowId},
+    window::{Fullscreen, Window, WindowId},
 };
 
 mod egui;
@@ -186,20 +186,21 @@ impl SimRenderer {
     }
 
     async fn init(&mut self, window: Window) -> Result<(), RendererError> {
-        cfg_if! {
-            if #[cfg(feature = "sync")] {
-                let size = self.game.physics.settings.window_size;
-            } else {
-                let size = self.game.config.window_size;
-            }
-        };
+        let size = window.inner_size().to_vec2();
 
+        // initialize late-init stuff
         self.wgpu.init(window, &self.instance, size).await?;
         self.shader.init(&self.wgpu)?;
         self.egui.init(&self.wgpu);
         self.fps.init(&self.wgpu)?;
 
-        self.wgpu.window.set_min_inner_size(Some(MIN_WINDOW));
+        #[cfg(not(target_arch = "wasm32"))]
+        self.wgpu
+            .window
+            .set_fullscreen(Some(Fullscreen::Borderless(None)));
+
+        #[cfg(target_arch = "wasm32")]
+        self.wgpu.window.set_min_inner_size(Some(WASM_WINDOW));
 
         Ok(())
     }
@@ -207,25 +208,18 @@ impl SimRenderer {
     fn update_window_size(&mut self, size: Vec2) {
         let scale = self.wgpu.window.scale_factor() as f32;
 
-        cfg_if! {
-            if #[cfg(feature = "sync")] {
-                self.game.physics.settings.window_size = size;
-            } else {
-                self.game.config.window_size = size;
-            }
-        };
-
+        // apply window size
+        self.game.physics.settings.window_size = size;
         self.shader.globals.resolution = size.to_array();
-
         self.wgpu.config.width = size.x as u32;
         self.wgpu.config.height = size.y as u32;
 
+        // reconfigure surface
         self.wgpu
             .surface
             .configure(&self.wgpu.device, &self.wgpu.config);
 
-        // why does self.fps.x and self.fps.y both count as a mut borrow of self.fps
-        // since there are no self-ref structs... idk
+        // reconfigure fps counter
         let FpsCounter {
             buffer,
             font_system,
@@ -237,36 +231,15 @@ impl SimRenderer {
             Some(size.x as f32 * scale),
             Some(size.y as f32 * scale),
         );
-
-        // etc
-        #[cfg(not(feature = "sync"))]
-        {
-            ipc::physics_send(ToPhysics::Settings(self.game.config));
-        }
     }
 
     fn draw(&mut self) -> Result<(), DrawError> {
         let device = &self.wgpu.device;
 
-        #[cfg(feature = "sync")]
         self.game.update();
 
-        cfg_if! {
-            if #[cfg(feature = "sync")] {
-                let scene = &self.game.physics;
-            } else {
-                let scene = self.game.physics.get();
-            }
-        };
-
-        cfg_if! {
-            if #[cfg(feature = "sync")] {
-                let settings = &scene.settings;
-            } else {
-                let settings = &mut self.game.config;
-            }
-        };
-
+        let scene = &self.game.physics;
+        let settings = &scene.settings;
         let surface_tex = self.wgpu.surface.get_current_texture()?;
 
         let surface_view = surface_tex
@@ -340,18 +313,9 @@ impl SimRenderer {
 
         // draw egui
         {
-            #[cfg(feature = "sync")]
             let settings = &mut self.game.physics.settings;
-
-            let mut update = false;
-
-            cfg_if! {
-                if #[cfg(feature = "sync")] {
-                    let reset = &mut self.game.reset;
-                } else {
-                    let reset = &mut false;
-                }
-            };
+            let reset = &mut self.game.reset;
+            let retessellate = &mut self.shader.retessellate;
 
             self.egui.draw(
                 &self.wgpu,
@@ -360,23 +324,11 @@ impl SimRenderer {
                 self.panel.update(
                     settings,
                     UpdateData {
-                        update: &mut update,
                         reset,
-                        retessellate: &mut self.shader.retessellate,
+                        retessellate,
                     },
                 ),
             );
-
-            #[cfg(not(feature = "sync"))]
-            {
-                if update || *reset || self.shader.retessellate {
-                    ipc::physics_send(ToPhysics::Settings(*settings));
-                }
-
-                if *reset {
-                    ipc::physics_send(ToPhysics::Reset);
-                }
-            }
         }
 
         self.wgpu.queue.submit(Some(encoder.finish()));
@@ -404,41 +356,11 @@ impl ApplicationHandler for SimRenderer {
                             info!("Got escape, quitting!");
                             event_loop.exit();
                         }
-                        KeyCode::Space => {
-                            cfg_if! {
-                                if #[cfg(feature = "sync")] {
-                                    self.game.time.paused = !self.game.time.paused;
-                                } else {
-                                    ipc::physics_send(ToPhysics::Pause);
-                                }
-                            };
-                        }
-                        KeyCode::ArrowRight => {
-                            cfg_if! {
-                                if #[cfg(feature = "sync")] {
-                                    if self.game.time.paused {
-                                        self.game.time.step = true;
-                                    }
-                                } else {
-                                    ipc::physics_send(ToPhysics::Step);
-                                }
-                            };
-                        }
-                        KeyCode::KeyR => {
-                            cfg_if! {
-                                if #[cfg(feature = "sync")] {
-                                    self.game.reset = true;
-                                } else {
-                                    ipc::physics_send(ToPhysics::Reset);
-                                }
-                            }
-                        }
-                        KeyCode::KeyC => {
-                            self.panel.toggle();
-                        }
-                        KeyCode::KeyH => {
-                            self.panel.toggle_help();
-                        }
+                        KeyCode::Space => self.game.time.play_pause(),
+                        KeyCode::ArrowRight => self.game.time.step(),
+                        KeyCode::KeyR => self.game.reset = true,
+                        KeyCode::KeyC => self.panel.toggle_self(),
+                        KeyCode::KeyH => self.panel.toggle_help(),
                         _ => {}
                     }
                 }
@@ -452,24 +374,10 @@ impl ApplicationHandler for SimRenderer {
                     right: self.input.rmb,
                 };
 
-                cfg_if! {
-                    if #[cfg(feature = "sync")] {
-                        let old_state = &mut self.game.physics.mouse;
-                    } else {
-                        let old_state = &mut self.game.mouse;
-                    }
-                }
-
-                *old_state = state;
-
-                #[cfg(not(feature = "sync"))]
-                ipc::physics_send(ToPhysics::UpdateMouse(state));
+                self.game.physics.mouse = state;
             }
             _ => {}
         }
-
-        #[cfg(not(feature = "sync"))]
-        ipc::physics_send(ToPhysics::UpdateMouse(self.game.mouse));
 
         match &event {
             WindowEvent::CloseRequested => {

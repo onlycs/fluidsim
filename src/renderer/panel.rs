@@ -19,7 +19,6 @@ impl Default for Panel {
 
 #[derive(Debug)]
 pub struct UpdateData<'a> {
-    pub update: &'a mut bool,
     pub reset: &'a mut bool,
     pub retessellate: &'a mut bool,
 }
@@ -32,7 +31,6 @@ impl Panel {
         update: UpdateData<'a>,
     ) -> impl FnMut(&Context) + 'a {
         let UpdateData {
-            update,
             reset,
             retessellate,
         } = update;
@@ -45,71 +43,67 @@ impl Panel {
             egui::Window::new("Simulation Settings").show(&ctx, |ui| {
                 ui.label(RichText::new("Graphics Settings").size(TEXT_SIZE).strong());
 
-                *update |= ui
-                    .add(Slider::new(&mut settings.fps, 100.0..=384.0).text("TPS"))
+                ui.add(Slider::new(&mut settings.speed, 0.5..=2.0).text("Speed (multiplier)"))
+                    .changed();
+
+                ui.add(Slider::new(&mut settings.step_time, 1.0..=60.0).text("Step Time (ms)"))
+                    .changed();
+
+                ui.add(Slider::new(&mut settings.steps_per_frame, 1..=5).text("Steps per Frame"))
                     .changed();
 
                 ui.add_space(25.0);
                 ui.label(RichText::new("Physics Settings").size(TEXT_SIZE).strong());
 
-                *update |= ui
-                    .add(Slider::new(&mut settings.gravity, -20.0..=20.0).text("Gravity"))
+                ui.add(Slider::new(&mut settings.gravity, -20.0..=20.0).text("Gravity"))
                     .changed();
 
-                *update |= ui
-                    .add(
-                        Slider::new(&mut settings.collision_dampening, 0.0..=1.0)
-                            .text("Collision Dampening"),
-                    )
-                    .changed();
+                ui.add(
+                    Slider::new(&mut settings.collision_dampening, 0.0..=1.0)
+                        .text("Collision Dampening"),
+                )
+                .changed();
 
                 ui.add_space(25.0);
                 ui.label(RichText::new("SPH Settings").size(TEXT_SIZE).strong());
 
-                *update |= ui
-                    .add(
-                        Slider::new(&mut settings.smoothing_radius, 0.01..=4.0)
-                            .text("Smoothing Radius"),
-                    )
-                    .changed();
+                ui.add(
+                    Slider::new(&mut settings.smoothing_radius, 0.01..=4.0)
+                        .text("Smoothing Radius"),
+                )
+                .changed();
 
-                *update |= ui
-                    .add(
-                        Slider::new(&mut settings.target_density, 0.0..=200.0)
-                            .text("Target Density"),
-                    )
-                    .changed();
+                ui.add(
+                    Slider::new(&mut settings.target_density, 0.0..=200.0).text("Target Density"),
+                )
+                .changed();
 
-                *update |= ui
-                    .add(
-                        Slider::new(&mut settings.pressure_multiplier, 0.0..=300.0)
-                            .text("Pressure Multiplier"),
-                    )
-                    .changed();
+                ui.add(
+                    Slider::new(&mut settings.pressure_multiplier, 0.0..=300.0)
+                        .text("Pressure Multiplier"),
+                )
+                .changed();
 
-                *update |= ui
-                    .add(
-                        Slider::new(&mut settings.viscosity_strength, 0.0..=1.0)
-                            .text("Viscosity Strength"),
-                    )
-                    .changed();
+                ui.add(
+                    Slider::new(&mut settings.viscosity_strength, 0.0..=1.0)
+                        .text("Viscosity Strength"),
+                )
+                .changed();
 
                 ui.add_space(25.0);
                 ui.label(RichText::new("Mouse Settings").size(TEXT_SIZE).strong());
 
-                *update |= ui
-                    .add(
-                        Slider::new(&mut settings.interaction_radius, 0.0..=10.0)
-                            .text("Interaction Radius"),
-                    )
-                    .changed();
+                ui.add(
+                    Slider::new(&mut settings.interaction_radius, 0.0..=10.0)
+                        .text("Interaction Radius"),
+                )
+                .changed();
 
-                *update |= ui
-                    .add(
-                        Slider::new(&mut settings.interaction_strength, 0.0..=100.0)
-                            .text("Interaction Strength"),
-                    )
-                    .changed();
+                ui.add(
+                    Slider::new(&mut settings.interaction_strength, 0.0..=100.0)
+                        .text("Interaction Strength"),
+                )
+                .changed();
 
                 ui.add_space(25.0);
                 ui.label(RichText::new("Initial Conditions").size(TEXT_SIZE).strong());
@@ -197,7 +191,7 @@ impl Panel {
         self.show_help = !self.show_help;
     }
 
-    pub fn toggle(&mut self) {
+    pub fn toggle_self(&mut self) {
         self.show_self = !self.show_self;
     }
 }

@@ -3,7 +3,9 @@ use crate::prelude::*;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SimSettings {
     pub dtime: f32,
-    pub fps: f32,
+    pub speed: f32,
+    pub step_time: f32,
+    pub steps_per_frame: usize,
 
     pub gravity: f32,
     pub collision_dampening: f32,
@@ -41,20 +43,26 @@ impl Default for SimSettings {
     fn default() -> Self {
         Self {
             dtime: 0.002,
-            fps: 110.0,
+            speed: 1.6,
+            step_time: 6.0,
+            steps_per_frame: 2,
 
             gravity: 9.8,
             collision_dampening: 0.40,
 
             smoothing_radius: 0.60,
+            #[cfg(not(target_arch = "wasm32"))]
             target_density: 35.0,
+            #[cfg(target_arch = "wasm32")]
+            target_density: 20.0,
+
             pressure_multiplier: 150.0,
             viscosity_strength: 0.06,
 
             #[cfg(not(target_arch = "wasm32"))]
             particles: Vec2::new(80., 80.),
             #[cfg(target_arch = "wasm32")]
-            particles: Vec2::new(50., 50.),
+            particles: Vec2::new(30., 30.),
 
             gap: 0.05,
             radius: 0.035,
@@ -70,30 +78,5 @@ impl Default for SimSettings {
 
             mass: 1.0,
         }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Default)]
-pub struct MouseState {
-    pub px: Vec2,
-    pub left: bool,
-    pub right: bool,
-}
-
-impl MouseState {
-    pub fn intensity(&self) -> f32 {
-        if !self.active() {
-            return 0.0;
-        }
-
-        if self.left {
-            1.0
-        } else {
-            -1.0
-        }
-    }
-
-    pub fn active(&self) -> bool {
-        self.left || self.right
     }
 }

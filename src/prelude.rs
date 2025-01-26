@@ -1,7 +1,8 @@
-pub(crate) use crate::{error::*, ipc::shared::*, physics};
-
-#[cfg(not(feature = "sync"))]
-pub(crate) use crate::ipc::{self, ToPhysics};
+pub(crate) use crate::{
+    error::*,
+    physics::Scene,
+    state::{config::*, mouse::*},
+};
 
 pub use std::sync::Arc;
 
@@ -16,4 +17,15 @@ pub use std::time::Instant;
 #[cfg(target_arch = "wasm32")]
 pub use web_time::Instant;
 
-pub const MIN_WINDOW: PhysicalSize<u32> = PhysicalSize::new(1200, 800);
+#[cfg(target_arch = "wasm32")]
+pub const WASM_WINDOW: PhysicalSize<u32> = PhysicalSize::new(1500, 1000);
+
+pub trait ToVec2 {
+    fn to_vec2(&self) -> Vec2;
+}
+
+impl ToVec2 for PhysicalSize<u32> {
+    fn to_vec2(&self) -> Vec2 {
+        Vec2::new(self.width as f32, self.height as f32)
+    }
+}
