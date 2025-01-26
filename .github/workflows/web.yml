@@ -37,6 +37,9 @@ jobs:
           default: true
           override: true
 
+      - name: Install wasm-pack via apt
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
       - name: Build
         run: wasm-pack build --target web --release
 
