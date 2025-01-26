@@ -1,17 +1,12 @@
 use core::f32;
 
-use crate::{gradient::LinearGradient, prelude::*};
-use ggez::graphics::{self, FillOptions, StrokeOptions};
+use crate::prelude::*;
 use itertools::Itertools;
-use physics::settings::MouseState;
 
-use super::settings::SimSettings;
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator,
     IntoParallelRefMutIterator, ParallelIterator,
 };
-
-const SCALE: f32 = 100.0;
 
 fn rad1((x, y): (isize, isize)) -> [(isize, isize); 9] {
     [
@@ -113,7 +108,7 @@ pub struct Scene {
     pub predictions: Vec<Vec2>,
     pub densities: Vec<f32>,
     pub velocities: Vec<Vec2>,
-    pub mouse: Option<MouseState>,
+    pub mouse: MouseState,
     pub lookup: SpatialLookup,
     pub settings: SimSettings,
 }
@@ -130,7 +125,7 @@ impl Scene {
             velocities: Vec::new(),
             predictions: Vec::new(),
             lookup: SpatialLookup::default(),
-            mouse: None,
+            mouse: MouseState::default(),
         };
 
         this.reset();
@@ -139,7 +134,7 @@ impl Scene {
     }
 
     pub fn absbounds(&self) -> Vec2 {
-        self.settings.size / SCALE / 2.0
+        self.settings.window_size / PX_PER_UNIT / 2.0
     }
 
     /// organize the particles in a centered grid
@@ -188,63 +183,6 @@ impl Scene {
 
         // update the lookup table
         self.lookup.update(&self.positions, self.settings);
-    }
-
-    // update the settings of the simulation
-    pub fn update_settings(&mut self, settings: SimSettings) {
-        self.settings = settings;
-    }
-
-    // draw the particles
-    pub fn draw(&self, mesh: &mut graphics::MeshBuilder) -> Result<(), ggez::GameError> {
-        let g = LinearGradient::new(vec![
-            // #1747A2 rgb(23, 71, 162)
-            (0.062, graphics::Color::from_rgb(23, 71, 162)),
-            // #51FC93 rgb(81, 252, 147)
-            (0.48, graphics::Color::from_rgb(81, 252, 147)),
-            // #FCED06, rgb(252, 237, 6)
-            (0.65, graphics::Color::from_rgb(252, 237, 6)),
-            // #EF4A0C, rgb(239, 74, 12)
-            (1.0, graphics::Color::from_rgb(239, 74, 12)),
-        ]);
-
-        let max_vel = 15.0;
-
-        for (i, p) in self.positions.iter().enumerate() {
-            // scale each particle back up to the drawing size
-            let Vec2 { x, y } = *p;
-            let xpx = x * SCALE;
-            let ypx = y * SCALE;
-
-            // calculate the color using the velocity
-            let vel = self.velocities[i].distance(Vec2::ZERO);
-            let rel = vel / max_vel;
-            let col = g.sample(rel.min(1.0));
-
-            mesh.circle(
-                graphics::DrawMode::Fill(FillOptions::default()),
-                [xpx, ypx],
-                self.settings.radius * SCALE,
-                0.1,
-                col,
-            )?;
-        }
-
-        // draw the interaction force
-        if let Some(mouse) = self.mouse {
-            let mpos = (mouse.px / SCALE) - (self.settings.size / SCALE / 2.0);
-            let mpos = mpos * SCALE;
-
-            mesh.circle(
-                graphics::DrawMode::Stroke(StrokeOptions::default()),
-                [mpos.x, mpos.y],
-                self.settings.interaction_radius * SCALE,
-                0.1,
-                graphics::Color::from_rgb(255, 255, 255),
-            )?;
-        }
-
-        Ok(())
     }
 
     pub fn len(&self) -> usize {
@@ -478,15 +416,15 @@ impl Scene {
 
     /// calculate mouse and gravity forces
     fn external_forces(
-        mouse: Option<MouseState>,
+        mouse: MouseState,
         position: Vec2,
         velocity: Vec2,
         settings: SimSettings,
     ) -> Vec2 {
         let gravity = Vec2::new(0.0, settings.gravity);
 
-        if let Some(mouse) = mouse {
-            let mousepos = mouse.px / SCALE - settings.size / SCALE / 2.0;
+        if mouse.left || mouse.right {
+            let mousepos = mouse.px / PX_PER_UNIT - settings.window_size / PX_PER_UNIT / 2.0;
             let offset = mousepos - position;
             let dist2 = offset.dot(offset);
 

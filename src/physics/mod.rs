@@ -1,29 +1,29 @@
-pub mod prelude;
 pub mod scene;
-pub mod settings;
 
-use crate::prelude::*;
-use async_std::sync::{Arc, Mutex};
-use physics::prelude::*;
-use std::time::{Duration, Instant};
-
-pub struct PhysicsWorkerThread {
-    render: Arc<Mutex<Scene>>,
-    saved: Scene,
-    thread: task::JoinHandle<()>,
+cfg_if! {
+    if #[cfg(not(feature = "sync"))] {
+        use crate::physics::scene::Scene;
+        use crate::prelude::*;
+        use std::{
+            thread::{self},
+            time::{Duration, Instant},
+        };
+    }
 }
 
+#[cfg(not(feature = "sync"))]
+pub struct PhysicsWorkerThread {
+    render: &'static mut Scene,
+}
+
+#[cfg(not(feature = "sync"))]
 impl PhysicsWorkerThread {
     pub fn new() -> Self {
-        let scene = Scene::new();
-        let render = Arc::new(Mutex::new(scene.clone()));
-        let render_copy = Arc::clone(&render);
+        let render = Box::leak(Box::new(Scene::new()));
+        let render_ptr = render as *mut Scene;
 
-        let thread = task::spawn(async move {
+        thread::spawn(|| {
             let mut scene = Scene::new();
-            let msg = ipc::physics_recv();
-
-            let render = Arc::clone(&render_copy);
 
             let mut pause = true;
             let mut timer = Instant::now();
@@ -31,11 +31,11 @@ impl PhysicsWorkerThread {
 
             'physics: loop {
                 // receive messages
-                while let Ok(msg) = msg.try_recv() {
+                while let Some(msg) = ipc::physics_recv() {
                     match msg {
                         ToPhysics::Settings(s) => {
                             spt_target = 1. / s.fps;
-                            scene.update_settings(s);
+                            scene.settings = s;
                         }
                         ToPhysics::Pause => {
                             info!("Toggling pause");
@@ -68,10 +68,10 @@ impl PhysicsWorkerThread {
                 timer = Instant::now();
 
                 if el.as_secs_f32() < spt_target {
-                    task::sleep(Duration::from_secs_f32(spt_target) - el).await;
+                    thread::sleep(Duration::from_secs_f32(spt_target) - el);
                 }
 
-                scene.settings.dtime = (el + timer.elapsed()).as_secs_f32();
+                scene.settings.dtime = el.as_secs_f32().max(spt_target);
 
                 // update scene
                 if !pause {
@@ -79,28 +79,27 @@ impl PhysicsWorkerThread {
                 }
 
                 // store the updated scene
-                let mut render_lock = render.lock().await;
-                *render_lock = scene.clone();
-                drop(render_lock);
+                *render = scene.clone();
             }
         });
 
-        Self {
-            render,
-            thread,
-            saved: scene,
-        }
+        let render = unsafe { &mut *render_ptr };
+
+        Self { render }
     }
 
     pub fn get(&mut self) -> &Scene {
-        if let Some(render) = self.render.try_lock() {
-            self.saved = render.clone();
-        }
-
-        &self.saved
+        // the rustc borrow checker hates this one neat trick
+        std::hint::black_box(&self.render)
     }
+}
 
-    pub fn tps(&self) -> f32 {
-        1. / self.saved.settings.dtime
+#[cfg(not(feature = "sync"))]
+impl Drop for PhysicsWorkerThread {
+    fn drop(&mut self) {
+        // properly drop self.render (the os likes when we give it back memory)
+        let ptr = self.render as *mut Scene;
+        let boxed = unsafe { Box::from_raw(ptr) };
+        drop(boxed);
     }
 }

@@ -1,4 +1,8 @@
-# fluidsim
+# fluidsim (wgpu edition)
+
+holy shit, halfway decent compile times (coming from bevy so this is a relief)
+
+tesselation (aka. circleizer) brought to you by lyon
 
 Thank you so much to Sebastian Lague for the gradient and also showing me how
 to do stuff.

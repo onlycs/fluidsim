@@ -1,92 +1,64 @@
 use crate::prelude::*;
-use std::ops::{Deref, DerefMut};
-
-use super::egui_translator::EguiTranslator;
-use egui::{Button, RichText, Slider};
-use physics::settings::SimSettings;
+use egui::{Button, Context, RichText, Slider};
 
 const TEXT_SIZE: f32 = 16.0;
 
 pub struct Panel {
-    egui: EguiTranslator,
-    pub(super) settings: SimSettings,
-    help: bool,
+    show_self: bool,
+    show_help: bool,
 }
 
 impl Default for Panel {
     fn default() -> Self {
         Self {
-            egui: EguiTranslator::default(),
-            settings: SimSettings::default(),
-            help: true,
+            show_self: true,
+            show_help: true,
         }
     }
 }
 
+#[derive(Debug)]
+pub struct UpdateData<'a> {
+    pub update: &'a mut bool,
+    pub reset: &'a mut bool,
+    pub retessellate: &'a mut bool,
+}
+
 impl Panel {
-    pub fn update_wpos(
-        &mut self,
-        ctx: &mut ggez::Context,
-    ) -> Result<Option<Vec2>, ggez::GameError> {
-        let wpos = match ctx.gfx.window_position() {
-            Ok(ppos) => Vec2::new(ppos.x as f32, ppos.y as f32),
+    /// Returns a function that should be used once to update the panel and synchronize updated settings
+    pub fn update<'a>(
+        &'a self,
+        settings: &'a mut SimSettings,
+        update: UpdateData<'a>,
+    ) -> impl FnMut(&Context) + 'a {
+        let UpdateData {
+            update,
+            reset,
+            retessellate,
+        } = update;
 
-            #[cfg(target_os = "linux")]
-            Err(_) => {
-                use hyprland::{data::Clients, shared::HyprData};
-
-                // we could possibly have hyprland which doesn't play nice
-                let clients = Clients::get().unwrap();
-                let clients = clients.iter().collect::<Vec<_>>();
-
-                let Some(client) = clients.iter().find(|client| client.class == "fluidsim") else {
-                    return Ok(None);
-                };
-
-                let (posy, posx) = client.at;
-
-                Vec2::new(posx as f32, posy as f32)
+        |ctx: &Context| {
+            if !self.show_self {
+                return;
             }
 
-            #[cfg(not(target_os = "linux"))]
-            Err(err) => return Err(err),
-        };
+            egui::Window::new("Simulation Settings").show(&ctx, |ui| {
+                ui.label(RichText::new("Graphics Settings").size(TEXT_SIZE).strong());
 
-        Ok(Some(wpos))
-    }
-
-    /// Updates the panel. Returns if we should stop propagation of mouse clicks, etc.
-    pub fn update(&mut self, ctx: &mut ggez::Context) -> bool {
-        let Ok(Some(wpos)) = self.update_wpos(ctx) else {
-            return false;
-        };
-
-        self.set_window(self.settings.size, wpos);
-
-        let panel_ctx = self.egui.ctx();
-        let mut updated = false;
-        let mut reset = false;
-
-        let SimSettings { size, position, .. } = self.settings;
-
-        let res = egui::Window::new("Simulation Settings")
-            .show(&panel_ctx, |ui| {
-                ui.label(RichText::new("GFX Settings").size(TEXT_SIZE).strong());
-
-                updated |= ui
-                    .add(Slider::new(&mut self.settings.fps, 50.0..=255.0).text("TPS"))
+                *update |= ui
+                    .add(Slider::new(&mut settings.fps, 100.0..=384.0).text("TPS"))
                     .changed();
 
                 ui.add_space(25.0);
                 ui.label(RichText::new("Physics Settings").size(TEXT_SIZE).strong());
 
-                updated |= ui
-                    .add(Slider::new(&mut self.settings.gravity, -20.0..=20.0).text("Gravity"))
+                *update |= ui
+                    .add(Slider::new(&mut settings.gravity, -20.0..=20.0).text("Gravity"))
                     .changed();
 
-                updated |= ui
+                *update |= ui
                     .add(
-                        Slider::new(&mut self.settings.collision_dampening, 0.0..=1.0)
+                        Slider::new(&mut settings.collision_dampening, 0.0..=1.0)
                             .text("Collision Dampening"),
                     )
                     .changed();
@@ -94,30 +66,30 @@ impl Panel {
                 ui.add_space(25.0);
                 ui.label(RichText::new("SPH Settings").size(TEXT_SIZE).strong());
 
-                updated |= ui
+                *update |= ui
                     .add(
-                        Slider::new(&mut self.settings.smoothing_radius, 0.01..=4.0)
+                        Slider::new(&mut settings.smoothing_radius, 0.01..=4.0)
                             .text("Smoothing Radius"),
                     )
                     .changed();
 
-                updated |= ui
+                *update |= ui
                     .add(
-                        Slider::new(&mut self.settings.target_density, 0.0..=200.0)
+                        Slider::new(&mut settings.target_density, 0.0..=200.0)
                             .text("Target Density"),
                     )
                     .changed();
 
-                updated |= ui
+                *update |= ui
                     .add(
-                        Slider::new(&mut self.settings.pressure_multiplier, 0.0..=300.0)
+                        Slider::new(&mut settings.pressure_multiplier, 0.0..=300.0)
                             .text("Pressure Multiplier"),
                     )
                     .changed();
 
-                updated |= ui
+                *update |= ui
                     .add(
-                        Slider::new(&mut self.settings.viscosity_strength, 0.0..=1.0)
+                        Slider::new(&mut settings.viscosity_strength, 0.0..=1.0)
                             .text("Viscosity Strength"),
                     )
                     .changed();
@@ -125,16 +97,16 @@ impl Panel {
                 ui.add_space(25.0);
                 ui.label(RichText::new("Mouse Settings").size(TEXT_SIZE).strong());
 
-                updated |= ui
+                *update |= ui
                     .add(
-                        Slider::new(&mut self.settings.interaction_radius, 0.0..=10.0)
+                        Slider::new(&mut settings.interaction_radius, 0.0..=10.0)
                             .text("Interaction Radius"),
                     )
                     .changed();
 
-                updated |= ui
+                *update |= ui
                     .add(
-                        Slider::new(&mut self.settings.interaction_strength, 0.0..=100.0)
+                        Slider::new(&mut settings.interaction_strength, 0.0..=100.0)
                             .text("Interaction Strength"),
                     )
                     .changed();
@@ -142,28 +114,28 @@ impl Panel {
                 ui.add_space(25.0);
                 ui.label(RichText::new("Initial Conditions").size(TEXT_SIZE).strong());
 
-                reset |= ui
+                *reset |= ui
                     .add(
-                        Slider::new(&mut self.settings.particles.x, 1.0..=100.0)
+                        Slider::new(&mut settings.particles.x, 1.0..=100.0)
                             .integer()
                             .text("Particles X"),
                     )
                     .changed();
 
-                reset |= ui
+                *reset |= ui
                     .add(
-                        Slider::new(&mut self.settings.particles.y, 1.0..=100.0)
+                        Slider::new(&mut settings.particles.y, 1.0..=100.0)
                             .integer()
                             .text("Particles Y"),
                     )
                     .changed();
 
-                reset |= ui
-                    .add(Slider::new(&mut self.settings.gap, 0.0..=3.0).text("Initial Gap"))
+                *reset |= ui
+                    .add(Slider::new(&mut settings.gap, 0.0..=3.0).text("Initial Gap"))
                     .changed();
 
-                updated |= ui
-                    .add(Slider::new(&mut self.settings.radius, 0.0..=1.0).text("Radius"))
+                *retessellate |= ui
+                    .add(Slider::new(&mut settings.radius, 0.0..=1.0).text("Radius"))
                     .changed();
 
                 ui.add_space(25.0);
@@ -173,89 +145,59 @@ impl Panel {
                     .add_sized([180., 30.], Button::new("Default Settings"))
                     .clicked()
                 {
-                    reset = true;
-                    self.settings = Default::default();
+                    *reset = true;
+                    *settings = SimSettings {
+                        window_size: settings.window_size,
+                        ..SimSettings::default()
+                    }
                 }
 
                 if ui
                     .add_sized([180., 30.], Button::new("Zero Gravity"))
                     .clicked()
                 {
-                    reset = true;
-                    self.settings = SimSettings::zero_gravity();
+                    *reset = true;
+                    *settings = SimSettings {
+                        window_size: settings.window_size,
+                        ..SimSettings::zero_gravity()
+                    };
                 }
 
-                if self.help {
+                if self.show_help {
                     ui.add_space(10.0);
                     ui.label("Press space to pause/play the simulation");
                     ui.label("Press the right arrow to step the simulation");
+                    ui.label("Use the left mouse button to pull particles");
+                    ui.label("Use the right mouse button to push particles");
+                    ui.label("Press 'R' to restart");
                     ui.label("Press 'C' to toggle this panel");
-                    ui.label("Press 'H' to toggle the help text");
+                    ui.label("Press 'H' to toggle this help text");
                 }
-            })
-            .unwrap()
-            .response;
+            });
 
-        // borrowing panel as mut
-        drop(panel_ctx);
+            // validation
+            if settings.particles.x <= 0.0 {
+                settings.particles.x = 1.0;
+            }
 
-        // validation
-        if self.settings.particles.x <= 0.0 {
-            self.settings.particles.x = 1.0;
+            if settings.particles.y <= 0.0 {
+                settings.particles.y = 1.0;
+            }
+
+            if settings.radius <= 0.0 {
+                settings.radius = 0.01;
+            }
+
+            settings.particles.x = settings.particles.x.round();
+            settings.particles.y = settings.particles.y.round();
         }
-
-        if self.settings.particles.y <= 0.0 {
-            self.settings.particles.y = 1.0;
-        }
-
-        if self.settings.radius <= 0.0 {
-            self.settings.radius = 0.01;
-        }
-
-        self.settings.particles.x = self.settings.particles.x.round();
-        self.settings.particles.y = self.settings.particles.y.round();
-
-        if updated || reset {
-            self.settings.position = position;
-            self.settings.size = size;
-            ipc::physics_send(ToPhysics::Settings(self.settings));
-        }
-
-        if reset {
-            ipc::physics_send(ToPhysics::Reset);
-        }
-
-        self.egui.update(ctx);
-
-        res.contains_pointer()
-    }
-
-    pub fn set_window(&mut self, size: Vec2, pos: Vec2) {
-        if self.settings.size == size && self.settings.position == pos {
-            return;
-        }
-
-        self.settings.size = size;
-        self.settings.position = pos;
-
-        ipc::physics_send(ToPhysics::Settings(self.settings));
     }
 
     pub fn toggle_help(&mut self) {
-        self.help = !self.help
+        self.show_help = !self.show_help;
     }
-}
 
-impl Deref for Panel {
-    type Target = EguiTranslator;
-
-    fn deref(&self) -> &Self::Target {
-        &self.egui
-    }
-}
-
-impl DerefMut for Panel {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.egui
+    pub fn toggle(&mut self) {
+        self.show_self = !self.show_self;
     }
 }

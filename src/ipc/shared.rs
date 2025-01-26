@@ -22,24 +22,7 @@ pub struct SimSettings {
     pub gap: f32,
     pub radius: f32,
 
-    pub size: Vec2,
-    pub position: Vec2,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct MouseState {
-    pub px: Vec2,
-    pub is_left: bool,
-}
-
-impl MouseState {
-    pub fn intensity(&self) -> f32 {
-        if self.is_left {
-            1.0
-        } else {
-            -1.0
-        }
-    }
+    pub window_size: Vec2,
 }
 
 impl SimSettings {
@@ -57,8 +40,8 @@ impl SimSettings {
 impl Default for SimSettings {
     fn default() -> Self {
         Self {
-            dtime: 1.8,
-            fps: 120.0,
+            dtime: 0.002,
+            fps: 110.0,
 
             gravity: 9.8,
             collision_dampening: 0.40,
@@ -68,18 +51,49 @@ impl Default for SimSettings {
             pressure_multiplier: 150.0,
             viscosity_strength: 0.06,
 
+            #[cfg(not(target_arch = "wasm32"))]
             particles: Vec2::new(80., 80.),
+            #[cfg(target_arch = "wasm32")]
+            particles: Vec2::new(50., 50.),
+
             gap: 0.05,
             radius: 0.035,
 
             interaction_radius: 4.0,
             interaction_strength: 90.0,
 
-            // window size and position
-            size: Vec2::new(800., 600.),
-            position: Vec2::ZERO,
+            // window size
+            #[cfg(not(target_arch = "wasm32"))]
+            window_size: Vec2::new(1200., 800.),
+            #[cfg(target_arch = "wasm32")]
+            window_size: Vec2::new(1500., 1000.),
 
             mass: 1.0,
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub struct MouseState {
+    pub px: Vec2,
+    pub left: bool,
+    pub right: bool,
+}
+
+impl MouseState {
+    pub fn intensity(&self) -> f32 {
+        if !self.active() {
+            return 0.0;
+        }
+
+        if self.left {
+            1.0
+        } else {
+            -1.0
+        }
+    }
+
+    pub fn active(&self) -> bool {
+        self.left || self.right
     }
 }
