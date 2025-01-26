@@ -41,11 +41,12 @@ jobs:
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       - name: Build
-        run: wasm-pack build --target web --release
+        run: wasm-pack build --target web --release --locked
 
       - name: Move files around
         run: |
           mkdir dist
+          rm pkg/.gitignore
           mv pkg dist/
           mv index.html dist/
 
