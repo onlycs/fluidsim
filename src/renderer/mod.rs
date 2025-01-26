@@ -128,25 +128,24 @@ impl WgpuState {
                 })
                 .and_then(|doc| {
                     let canvas = doc.query_selector("canvas").ok()??;
+                    let help = doc.get_element_by_id("onboard-help")?;
+                    help.set_attribute("style", "display: block;").ok()?;
+
+                    let onclick = Closure::new(Box::new(move |_| {
+                        doc.query_selector("canvas")
+                            .unwrap()
+                            .unwrap()
+                            .set_attribute("style", "width: 100vw; height: 100vh;")
+                            .unwrap();
+
+                        help.set_attribute("style", "display: none;").ok().unwrap();
+                    }) as Box<dyn FnMut(Event)>);
 
                     canvas
-                        .add_event_listener_with_callback(
-                            "click",
-                            Closure::wrap(Box::new(|_| {
-                                // set w and h of canvas to 100vw and 100vh, after click
-
-                                let window = web_sys::window().unwrap();
-                                let document = window.document().unwrap();
-                                let canvas = document.query_selector("canvas").unwrap().unwrap();
-
-                                canvas
-                                    .set_attribute("style", "width: 100vw; height: 100vh;")
-                                    .unwrap();
-                            }) as Box<dyn FnMut(Event)>)
-                            .as_ref()
-                            .unchecked_ref(),
-                        )
+                        .add_event_listener_with_callback("click", onclick.as_ref().unchecked_ref())
                         .ok()?;
+
+                    onclick.forget();
 
                     Some(())
                 })
