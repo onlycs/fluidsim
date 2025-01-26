@@ -5,8 +5,6 @@ pub(crate) use crate::ipc::{self, ToPhysics};
 
 pub use std::sync::Arc;
 
-pub use async_std::task;
-
 pub use glam::Vec2;
 use winit::dpi::PhysicalSize;
 

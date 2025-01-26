@@ -1,15 +1,10 @@
-use crate::prelude::*;
-
-use async_std::channel::{self, Receiver, Sender};
-use async_std::sync::{Arc, Mutex};
-
-use lazy_static::lazy_static;
-use shared::*;
-
 pub mod shared;
 
 cfg_if! {
     if #[cfg(not(feature = "sync"))] {
+        use crate::prelude::*;
+        use lazy_static::lazy_static;
+
         #[derive(Clone, Debug, PartialEq)]
         pub enum ToPhysics {
             Settings(SimSettings),
@@ -20,58 +15,40 @@ cfg_if! {
             Kill,
         }
 
-        struct UniversalIpc {
-            physics_send: Sender<ToPhysics>,
-            physics_recv: Option<Receiver<ToPhysics>>,
+        struct IpcIsh {
+            physics: &'static mut Vec<ToPhysics>,
         }
 
-        impl UniversalIpc {
+        impl IpcIsh {
             fn new() -> Self {
-                let (physics_send, physics_recv) = channel::unbounded();
-
                 Self {
-                    physics_send,
-                    physics_recv: Some(physics_recv),
+                    physics: Box::leak(Box::new(vec![])),
                 }
             }
         }
 
         lazy_static! {
-            static ref IPC: Arc<Mutex<UniversalIpc>> = Arc::new(Mutex::new(UniversalIpc::new()));
+            static ref IPC: IpcIsh = IpcIsh::new();
         }
 
-        macro_rules! cfg_sender {
-            ($sender:ident: $ty:ty) => {
-                pub fn $sender(msg: $ty) {
-                    trace!("Sending message via {}: {:?}", stringify!($sender), msg);
-
-                    task::spawn(async move {
-                        IPC.lock().await.$sender.send(msg).await.unwrap();
-                    });
-                }
-            };
-
-            ($($sender:ident: $ty:ty),+) => {
-                $(cfg_sender!($sender: $ty);)+
-            };
+        #[allow(invalid_reference_casting)] // dancing with the devil
+        fn get_physics() -> &'static mut Vec<ToPhysics> {
+            let physics = &IPC.physics;
+            let physics = physics as *const &mut Vec<ToPhysics>;
+            let physics = physics as *mut &mut Vec<ToPhysics>;
+            unsafe { &mut *physics }
         }
 
-        macro_rules! cfg_receiver {
-            ($receiver:ident: $ty:ty) => {
-                pub fn $receiver() -> Receiver<$ty> {
-                    task::block_on(async move {
-                        IPC.lock().await.$receiver.take().unwrap()
-                    })
-                }
-            };
-
-            ($($sender:ident: $ty:ty),+) => {
-                $(cfg_receiver!($sender: $ty);)+
-            };
+        pub fn physics_send(msg: ToPhysics) {
+            std::hint::black_box({
+                get_physics().push(msg)
+            });
         }
 
-        cfg_sender!(physics_send: ToPhysics);
-        cfg_receiver!(physics_recv: ToPhysics);
-
+        pub fn physics_recv() -> Option<ToPhysics> {
+            std::hint::black_box(
+                get_physics().pop()
+            )
+        }
     }
 }

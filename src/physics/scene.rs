@@ -185,11 +185,6 @@ impl Scene {
         self.lookup.update(&self.positions, self.settings);
     }
 
-    // update the settings of the simulation
-    pub fn update_settings(&mut self, settings: SimSettings) {
-        self.settings = settings;
-    }
-
     pub fn len(&self) -> usize {
         self.positions.len()
     }

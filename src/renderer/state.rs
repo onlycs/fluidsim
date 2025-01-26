@@ -1,8 +1,10 @@
 use crate::prelude::*;
-use physics::scene::Scene;
 
 #[cfg(not(feature = "sync"))]
 use physics::PhysicsWorkerThread;
+
+#[cfg(feature = "sync")]
+use physics::scene::Scene;
 
 cfg_if! {
     if #[cfg(feature = "sync")] {
@@ -11,7 +13,6 @@ cfg_if! {
             pub step: bool,
             pub last_instant: Instant,
         }
-
 
         pub struct Game {
             pub physics: Scene,
@@ -52,23 +53,26 @@ impl Game {
     }
 
     #[cfg(feature = "sync")]
-    pub fn scene(&self) -> &Scene {
-        &self.physics
-    }
-
-    #[cfg(not(feature = "sync"))]
-    pub fn scene(&mut self) -> &Scene {
-        self.physics.get()
-    }
-
-    #[cfg(feature = "sync")]
     pub fn update(&mut self) {
         if self.reset {
             self.physics.reset();
             self.reset = false;
         }
 
-        self.physics.settings.dtime = self.time.last_instant.elapsed().as_secs_f32();
+        let dtime_target = 1. / self.physics.settings.fps;
+
+        if self.time.step {
+            self.physics.settings.dtime = dtime_target;
+        } else {
+            self.physics.settings.dtime = self
+                .time
+                .last_instant
+                .elapsed()
+                .as_secs_f32()
+                .min(dtime_target);
+        }
+
+        self.time.last_instant = Instant::now();
 
         if !self.time.paused || self.time.step {
             self.physics.update();

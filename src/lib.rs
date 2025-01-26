@@ -13,13 +13,13 @@ extern crate log;
 #[macro_use]
 extern crate cfg_if;
 
-extern crate async_std;
 extern crate egui;
 extern crate egui_wgpu;
 extern crate glam;
 extern crate itertools;
 extern crate lazy_static;
 extern crate lyon;
+extern crate pollster;
 extern crate rand;
 extern crate rayon;
 extern crate skuld;

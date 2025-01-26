@@ -13,7 +13,7 @@ use winit::{
     dpi::PhysicalSize,
     event::WindowEvent,
     event_loop::ActiveEventLoop,
-    keyboard::{KeyCode, PhysicalKey},
+    keyboard::KeyCode,
     window::{Window, WindowId},
 };
 
@@ -58,7 +58,7 @@ impl WgpuState {
         let surface = instance.create_surface(Arc::clone(&window))?;
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptionsBase {
-                power_preference: PowerPreference::HighPerformance,
+                power_preference: PowerPreference::None,
                 force_fallback_adapter: false,
                 compatible_surface: Some(&surface),
             })
@@ -88,7 +88,7 @@ impl WgpuState {
             .await?;
 
         let caps = surface.get_capabilities(&adapter);
-        let selected_fmt = [wgpu::TextureFormat::Bgra8Unorm];
+        let selected_fmt = [wgpu::TextureFormat::Rgba8Unorm];
 
         let texture_fmt = caps
             .formats
@@ -103,11 +103,8 @@ impl WgpuState {
             format: *texture_fmt,
             width: winx as u32,
             height: winy as u32,
-            #[cfg(not(target_arch = "wasm32"))]
             present_mode: wgpu::PresentMode::Fifo,
-            #[cfg(target_arch = "wasm32")]
-            present_mode: wgpu::PresentMode::Fifo,
-            desired_maximum_frame_latency: 0,
+            desired_maximum_frame_latency: 1,
             alpha_mode: caps.alpha_modes[0],
             view_formats: vec![],
         };
@@ -482,14 +479,14 @@ impl ApplicationHandler for SimRenderer {
                     let ptr = self as *mut _;
                     let num = ptr as usize;
 
-                    task::block_on(async move {
+                    wasm_bindgen_futures::block_on(async move {
                         let ptr = num as *mut Self;
                         let this = unsafe { &mut *ptr };
 
                         this.init(win).await.unwrap();
                     })
                 } else {
-                    task::block_on(self.init(win))?;
+                    pollster::block_on(self.init(win))?;
                 }
             }
 
