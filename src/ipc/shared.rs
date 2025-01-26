@@ -41,7 +41,7 @@ impl Default for SimSettings {
     fn default() -> Self {
         Self {
             dtime: 0.002,
-            fps: 120.0,
+            fps: 110.0,
 
             gravity: 9.8,
             collision_dampening: 0.40,

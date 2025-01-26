@@ -460,15 +460,16 @@ impl ApplicationHandler for SimRenderer {
                     }
                 }
 
-                if state.active() || old_state.active() {
-                    *old_state = state;
+                *old_state = state;
 
-                    #[cfg(not(feature = "sync"))]
-                    ipc::physics_send(ToPhysics::UpdateMouse(state));
-                }
+                #[cfg(not(feature = "sync"))]
+                ipc::physics_send(ToPhysics::UpdateMouse(state));
             }
             _ => {}
         }
+
+        #[cfg(not(feature = "sync"))]
+        ipc::physics_send(ToPhysics::UpdateMouse(self.game.mouse));
 
         match &event {
             WindowEvent::CloseRequested => {
