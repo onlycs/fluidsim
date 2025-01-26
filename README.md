@@ -1,13 +1,13 @@
 # fluidsim (wgpu edition)
 
-holy shit, halfway decent compile times (coming from bevy so this is a relief)
+bevy -> wgpu == decent compile times (finally)
 
 tesselation (aka. circleizer) brought to you by lyon
 
 Thank you so much to Sebastian Lague for the gradient and also showing me how
 to do stuff.
 
-I'm in the process of porting this to wgpu, see branch wgpu.
+im gonna make a compute shader for this next (the cpu is soo bad at parallelizing simple stuff lmao)
 
 ## Demo (Youtube)
 
