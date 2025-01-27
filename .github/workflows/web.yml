@@ -19,16 +19,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Load target cache
-        uses: actions/cache/restore@v4
-        id: cache-restore
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            /home/runner/work/fluidsim/fluidsim/target
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-rust-cache-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-rust-cache
+          prefix-key: "${{ runner.os }}"
+          shared-key: "wasm"
+          cache-all-crates: true
 
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
@@ -49,19 +45,10 @@ jobs:
           rm pkg/.gitignore
           mv pkg dist/
           mv index.html dist/
+          echo fluidsim.angad.page > dist/CNAME
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
-
-      - name: Save target cache
-        if: always() && (steps.cache-restore.outputs.cache-hit != 'true' || steps.cache-restore.outputs.cache-primary-key == '${{ runner.os }}-rust-cache')
-        uses: actions/cache/save@v4
-        with:
-          path: | 
-            /home/runner/work/attendance/attendance/src-api/target
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-rust-cache-${{ hashFiles('**/Cargo.lock') }}
