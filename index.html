@@ -1,61 +1,84 @@
 <!doctype html>
 <html lang="en-US">
-	<head>
-		<meta charset="utf-8" />
-		<title>Fluid Simulation</title>
-		<script src="https://unpkg.com/@tailwindcss/browser@4"></script>
-	</head>
 
-	<body
-		id="fluidsim"
-		class="w-screen h-screen flex items-center justify-center flex-col m-0"
-		style="background-color: #2a2a2a;">
+<head>
+	<meta charset="utf-8" />
+	<title>Fluid Simulation</title>
+	<script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+</head>
 
-		<script type="module">
-			import init from "./pkg/fluidsim.js";
+<body id="fluidsim" class="w-screen h-screen flex items-center justify-center flex-col m-0">
+	<style>
+		body {
+			background-color: #1a1a1a;
+		}
 
-			init()
-				.then(() => {
-					console.log("loaded!");
-				})
-				.catch(() => {
-					console.log("failure?");
+		a {
+			text-decoration: underline;
+		}
+	</style>
 
-					setTimeout(() => {
-						if (document.querySelectorAll("canvas").length == 0) {
-							document.getElementById("help").style.display = "block";
-							document.getElementById("onboard-help").style.display = "none";
-						}
-					}, 500)
-				});
-		</script>
+	<script type="module">
+		import init from "./pkg/fluidsim.js";
 
-		<p id="help" class="mb-4 text-white text-2xl text-center"
-			style="display: none;">
-			This does not work on Firefox at the moment. <br>
-			You need extra steps to make this work on chrome. <br>
+		init()
+			.then(() => {
+				console.log("loaded!");
+			})
+			.catch(() => {
+				console.log("failure?");
 
-			Go to
-			<span style="background-color: #101010;"
-				class="py-1 pl-2 pr-1 rounded-sm text-xl">
-				chrome://flags
-			</span>, search for and enable
+				setTimeout(() => {
+					if (document.querySelectorAll("canvas").length == 0) {
+						document.getElementById("help").style.display = "block";
+						document.getElementById("onboard-help").style.display = "none";
+					}
+				}, 500)
+			});
+	</script>
 
-			<br>
-			<span style="background-color: #101010;"
-				class="py-1 pl-2 pr-1 rounded-sm text-xl">
-				Unsafe WebGPU Support
-			</span>, then restart your browser.
+	<script>
+		window.addEventListener("load", () => {
+			const ua = navigator.userAgent;
 
-			<br><br>
-			I hope this goes without saying:<br>
-			this will not work on a phone<br>
-		</p>
+			if (ua.includes("Mobile")) {
+				document.getElementById("help").innerHTML = "This demo does not support mobile devices.";
+			} else if (ua.includes("Firefox")) {
+				document.getElementById("help").innerHTML = "Firefox has not yet added WebGPU Buffer support.<br><br>For this reason, only supports Chrome and<br>Chrome-based browsers (Edge, Opera, etc.) are supported.";
+			} else if (ua.includes("Edg")) {
+				const repl = document.getElementById("help").innerHTML.replaceAll("chrome", "edge");
+				document.getElementById("help").innerHTML = repl;
+			} else if (ua.includes("Linux") && ua.includes("Chrome")) {
+				const ihtml = document.getElementById("help").innerHTML;
+				document.getElementById("help").innerHTML = ihtml + "<br><br>Linux requires <a href='https://github.com/gpuweb/gpuweb/wiki/Implementation-Status#chromium-chrome-edge-etc'>extra steps</a>.";
+			} else if (ua.includes("CrOS")) {
+				const ihtml = document.getElementById("help").innerHTML;
+				document.getElementById("help").innerHTML = ihtml.replaceAll("browser", "device");
+			} else if (!ua.includes("Chrome")) {
+				const ihtml = document.getElementById("help").innerHTML;
+				document.getElementById("help").innerHTML = "Your browser has not implemented WebGPU or is out of date.";
+			}
+		});
+	</script>
 
-		<p id="onboard-help" class="mb-4 text-white text-2xl text-center"
-			style="display: none;">
-			Click on the window, then click space to start.
-			You can interact with the mouse.
-		</p>
-	</body>
+	<p id="help" class="mb-4 text-white text-2xl text-center" style="display: none;">
+		<b class="font-extrabold">Update your browser</b>, then go to
+		<span style="background-color: #101010;" class="py-1 pl-2 pr-1 rounded-sm text-xl">
+			chrome://flags
+		</span>,<br>
+
+		<b class="font-extrabold">search for</b> and enable
+		<span style="background-color: #101010;" class="py-1 pl-2 pr-1 rounded-sm text-xl">
+			Unsafe WebGPU Support
+		</span>,<br>
+
+		then restart your browser.
+	</p>
+
+	<p id="onboard-help" class="mb-4 text-white text-2xl text-center" style="display: none;">
+		Click on the window, then click space to start.
+		You can interact with the mouse.
+	</p>
+</body>
+
 </html>
