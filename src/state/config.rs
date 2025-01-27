@@ -45,7 +45,7 @@ impl Default for SimSettings {
             dtime: 0.002,
             speed: 1.6,
             step_time: 6.0,
-            steps_per_frame: 2,
+            steps_per_frame: 3,
 
             gravity: 9.8,
             collision_dampening: 0.40,
