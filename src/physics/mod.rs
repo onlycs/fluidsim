@@ -246,14 +246,14 @@ impl Scene {
                     let sign = pos.y.signum();
 
                     pos.y = y * sign + self.settings.radius * -sign;
-                    vel.y *= -self.settings.collision_dampening;
+                    vel.y *= -self.settings.collision_damping;
                 }
 
                 if (pos.x.abs() + self.settings.radius) > x {
                     let sign = pos.x.signum();
 
                     pos.x = x * sign + self.settings.radius * -sign;
-                    vel.x *= -self.settings.collision_dampening;
+                    vel.x *= -self.settings.collision_damping;
                 }
             });
     }

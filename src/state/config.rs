@@ -8,7 +8,7 @@ pub struct SimSettings {
     pub steps_per_frame: usize,
 
     pub gravity: f32,
-    pub collision_dampening: f32,
+    pub collision_damping: f32,
 
     pub smoothing_radius: f32,
     pub target_density: f32,
@@ -48,7 +48,7 @@ impl Default for SimSettings {
             steps_per_frame: 2,
 
             gravity: 9.8,
-            collision_dampening: 0.40,
+            collision_damping: 0.40,
 
             smoothing_radius: 0.60,
             #[cfg(not(target_arch = "wasm32"))]

@@ -59,7 +59,7 @@ impl Panel {
                     .changed();
 
                 ui.add(
-                    Slider::new(&mut settings.collision_dampening, 0.0..=1.0)
+                    Slider::new(&mut settings.collision_damping, 0.0..=1.0)
                         .text("Collision Dampening"),
                 )
                 .changed();
