@@ -41,7 +41,6 @@ features = ["facade"]
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = "0.1.6"
 console_log = "1.0"
-wgpu = { version = "24.0.0", features = ["webgl"] }
 wasm-bindgen = "=0.2.99"
 wasm-bindgen-futures = "0.4.49"
 web-sys = { version = "0.3", features = ["Document", "Window", "Element"] }

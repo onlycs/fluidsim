@@ -14,12 +14,8 @@ struct Primitive {
 	_pad: u32,
 };
 
-struct Primitives {
-    primitives: array<Primitive, 16384>,
-};
-
 @group(0) @binding(0) var<uniform> globals: Globals;
-@group(0) @binding(1) var<storage, read> u_primitives: Primitives;
+@group(0) @binding(1) var<storage, read> primitives: array<Primitive, 16384>;
 
 struct VertexOutput {
     @location(0) v_color: vec4<f32>,
@@ -33,7 +29,7 @@ fn main(
     @location(2) a_prim_id: u32,
     @builtin(instance_index) instance_idx: u32
 ) -> VertexOutput {
-    var prim: Primitive = u_primitives.primitives[a_prim_id + instance_idx];
+    var prim: Primitive = primitives[a_prim_id + instance_idx];
 
     var invert_y = vec2<f32>(1.0, -1.0);
 
