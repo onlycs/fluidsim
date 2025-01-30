@@ -4,8 +4,11 @@ use egui::EguiState;
 use fps::{FpsCounter, FpsState};
 use input::{InputHelper, InputResponse};
 use panel::{Panel, UpdateData};
-use shader::vertex::VsState;
-use state::Game;
+use shader::{
+    compute::{self, ComputeState},
+    vertex::VsState,
+};
+use state::GameState;
 use std::ops::{Deref, DerefMut};
 use wgpu::PowerPreference;
 use winit::{
@@ -16,6 +19,8 @@ use winit::{
     keyboard::KeyCode,
     window::{Window, WindowId},
 };
+
+use self::compute::ComputeData;
 
 mod egui;
 mod fps;
@@ -183,13 +188,14 @@ pub struct SimRenderer {
     instance: wgpu::Instance,
     wgpu: WgpuState,
     shader: VsState,
+    compute: ComputeState,
 
     egui: EguiState,
     panel: Panel,
 
     fps: FpsState,
     input: InputHelper,
-    game: state::Game,
+    game: GameState,
 }
 
 impl SimRenderer {
@@ -199,9 +205,10 @@ impl SimRenderer {
         Self {
             instance,
             wgpu: WgpuState::default(),
-            game: Game::new(),
+            game: GameState::new(),
             fps: FpsState::default(),
             shader: VsState::default(),
+            compute: ComputeState::default(),
             egui: EguiState::default(),
             panel: Panel::default(),
             input: InputHelper::default(),
@@ -209,7 +216,11 @@ impl SimRenderer {
     }
 
     fn uninit(&self) -> bool {
-        self.wgpu.uninit() || self.egui.uninit() || self.shader.uninit() || self.fps.uninit()
+        self.wgpu.uninit()
+            || self.egui.uninit()
+            || self.shader.uninit()
+            || self.fps.uninit()
+            || self.compute.uninit()
     }
 
     async fn init(&mut self, window: Window) -> Result<(), RendererError> {
@@ -217,7 +228,8 @@ impl SimRenderer {
 
         // initialize late-init stuff
         self.wgpu.init(window, &self.instance, size).await?;
-        self.shader.init(&self.wgpu)?;
+        self.compute.init(&self.wgpu);
+        self.shader.init(&self.wgpu, self.compute.prims_buf())?;
         self.egui.init(&self.wgpu);
         self.fps.init(&self.wgpu)?;
 
@@ -236,7 +248,8 @@ impl SimRenderer {
         let scale = self.wgpu.window.scale_factor() as f32;
 
         // apply window size
-        self.game.physics.simconfig.window_size = size;
+        self.compute.user.settings.window_size = size;
+        self.compute.update.settings = true;
         self.shader.globals.resolution = size.to_array();
         self.wgpu.config.width = size.x as u32;
         self.wgpu.config.height = size.y as u32;
@@ -263,10 +276,7 @@ impl SimRenderer {
     fn draw(&mut self) -> Result<(), DrawError> {
         let device = &self.wgpu.device;
 
-        self.game.update();
-
-        let scene = &self.game.physics;
-        let settings = &scene.simconfig;
+        let settings = &self.compute.user.settings;
         let surface_tex = self.wgpu.surface.get_current_texture()?;
 
         let surface_view = surface_tex
@@ -290,18 +300,12 @@ impl SimRenderer {
             label: Some("circle command encoder"),
         });
 
-        self.shader.update(&self.wgpu, *settings, scene)?;
+        self.shader.update(&self.wgpu, *settings)?;
 
         self.wgpu.queue.write_buffer(
             &self.shader.globals_buf,
             0,
             bytemuck::cast_slice(&[self.shader.globals]),
-        );
-
-        self.wgpu.queue.write_buffer(
-            &self.shader.prims_buf,
-            0,
-            bytemuck::cast_slice(&self.shader.prims),
         );
 
         // draw dots
@@ -329,7 +333,7 @@ impl SimRenderer {
             pass.draw_indexed(
                 0..self.shader.index_buf.size() as u32 / 2,
                 0,
-                0..scene.positions.len() as u32,
+                0..self.compute.user.settings.num_particles,
             );
         }
 
@@ -340,8 +344,17 @@ impl SimRenderer {
 
         // draw egui
         {
-            let settings = &mut self.game.physics.simconfig;
-            let reset = &mut self.game.reset;
+            let ComputeData {
+                update:
+                    compute::UpdateState {
+                        settings: settings_up,
+                        reset,
+                        ..
+                    },
+                user: compute::UserData { settings, .. },
+                ..
+            } = &mut *self.compute;
+
             let retessellate = &mut self.shader.retessellate;
 
             self.egui.draw(
@@ -350,9 +363,10 @@ impl SimRenderer {
                 &surface_view,
                 self.panel.update(
                     settings,
-                    &mut self.game.physics.gfx,
-                    &mut self.game.physics.init,
+                    &mut self.game.gfx,
+                    &mut self.game.init,
                     UpdateData {
+                        comp_update: settings_up,
                         reset,
                         retessellate,
                     },
@@ -398,7 +412,8 @@ impl ApplicationHandler for SimRenderer {
                 let (x, y) = self.input.mouse_pos;
 
                 let state = MouseState::new([x, y].into(), self.input.lmb, self.input.rmb);
-                self.game.physics.mouse = state;
+                self.compute.user.mouse = state;
+                self.compute.update.mouse = true;
             }
             _ => {}
         }

@@ -21,52 +21,24 @@ impl TimeState {
     }
 }
 
-pub struct Game {
-    pub physics: Scene,
-
+pub struct GameState {
     pub time: TimeState,
     pub reset: bool,
+    pub gfx: GraphicsSettings,
+    pub init: InitialConditions,
 }
 
-impl Game {
+impl GameState {
     pub fn new() -> Self {
         Self {
-            physics: Scene::new(),
+            gfx: GraphicsSettings::default(),
+            init: InitialConditions::default(),
             time: TimeState {
                 paused: true,
                 step: false,
                 last_instant: Instant::now(),
             },
             reset: false,
-        }
-    }
-
-    pub fn update(&mut self) {
-        if self.reset {
-            self.physics.reset();
-            self.reset = false;
-            self.time.paused = true;
-        }
-
-        if self.time.step {
-            self.physics.simconfig.dtime = self.physics.gfx.step_time / 1e3;
-        } else {
-            let el = self.time.last_instant.elapsed().as_secs_f32();
-            let speed = self.physics.gfx.speed;
-            let sspf = self.physics.gfx.steps_per_frame;
-            let maxed = (el * speed / sspf as f32).min(1. / 90.);
-
-            self.physics.simconfig.dtime = maxed;
-        }
-
-        self.time.last_instant = Instant::now();
-
-        if !self.time.paused || self.time.step {
-            for _ in 0..self.physics.gfx.steps_per_frame {
-                self.physics.update();
-            }
-
-            self.time.step = false;
         }
     }
 }

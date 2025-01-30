@@ -82,9 +82,8 @@ impl StrokeVertexConstructor<VsInput> for WithId {
 #[allow(unused)]
 pub struct VsData {
     pub globals: VsGlobals,
-    pub prims: Vec<CirclePrimitive>,
 
-    pub prims_buf: wgpu::Buffer,
+    pub prims_buf: Arc<wgpu::Buffer>,
     pub globals_buf: wgpu::Buffer,
 
     pub index_buf: wgpu::Buffer,
@@ -104,12 +103,7 @@ pub struct VsData {
 }
 
 impl VsData {
-    pub fn update(
-        &mut self,
-        wgpu: &WgpuData,
-        settings: SimSettings,
-        scene: &Scene,
-    ) -> Result<(), DrawError> {
+    pub fn update(&mut self, wgpu: &WgpuData, settings: SimSettings) -> Result<(), DrawError> {
         if self.retessellate {
             let device = &wgpu.device;
 
@@ -141,75 +135,6 @@ impl VsData {
             self.retessellate = false;
         }
 
-        let num_particles = scene.positions.len();
-        let g = LinearGradient::new(vec![
-            // #1747A2 rgb(23, 71, 162)
-            (
-                0.062,
-                Color {
-                    r: 23. / 255.,
-                    g: 71. / 255.,
-                    b: 162. / 255.,
-                    a: 1.0,
-                },
-            ),
-            // #51FC93 rgb(81, 252, 147)
-            (
-                0.48,
-                Color {
-                    r: 81. / 255.,
-                    g: 252. / 255.,
-                    b: 147. / 255.,
-                    a: 1.0,
-                },
-            ),
-            // #FCED06, rgb(252, 237, 6)
-            (
-                0.65,
-                Color {
-                    r: 252. / 255.,
-                    g: 237. / 255.,
-                    b: 6. / 255.,
-                    a: 1.0,
-                },
-            ),
-            // #EF4A0C, rgb(239, 74, 12)
-            (
-                1.0,
-                Color {
-                    r: 239. / 255.,
-                    g: 74. / 255.,
-                    b: 12. / 255.,
-                    a: 1.0,
-                },
-            ),
-        ]);
-
-        // arbitrary max velocity because we need *color*
-        // this isn't actually used for limiting the velocity
-        const MAX_VEL: f32 = 15.0;
-
-        // draw my particles
-        for i in 0..num_particles {
-            let Vec2 { x, y } = scene.positions[i] * PX_PER_UNIT;
-
-            let speed = scene.velocities[i].distance(Vec2::ZERO);
-            let relative = speed / MAX_VEL;
-            let color = g.sample(relative.clamp(0.0, 1.0));
-
-            self.prims[i] = CirclePrimitive {
-                color: [
-                    color.r as f32,
-                    color.g as f32,
-                    color.b as f32,
-                    color.a as f32,
-                ],
-                translate: [x, y],
-                z_index: 0,
-                _pad: 0,
-            };
-        }
-
         Ok(())
     }
 }
@@ -222,7 +147,11 @@ impl VsState {
         self.0.is_none()
     }
 
-    pub fn init(&mut self, wgpu: &WgpuData) -> Result<(), TessellationError> {
+    pub fn init(
+        &mut self,
+        wgpu: &WgpuData,
+        prims_buf: Arc<wgpu::Buffer>,
+    ) -> Result<(), TessellationError> {
         let mut tessellation_buf: VertexBuffers<_, u16> = VertexBuffers::new();
         let mut tessellator = FillTessellator::new();
 
@@ -234,13 +163,6 @@ impl VsState {
         )?;
 
         let device = &wgpu.device;
-
-        let prims_buf = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("primitive buffer"),
-            size: (ARRAY_LEN * std::mem::size_of::<CirclePrimitive>()) as u64,
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
 
         let globals_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("globals buffer"),
@@ -364,7 +286,6 @@ impl VsState {
                 zoom: 1.0,
                 _pad: [0.; _],
             },
-            prims: vec![CirclePrimitive::default(); ARRAY_LEN],
             prims_buf,
             globals_buf,
             index_buf: init_ibuf,
