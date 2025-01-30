@@ -10,7 +10,7 @@ pub const FS: wgpu::ShaderModuleDescriptor<'_> = wgpu::include_wgsl!(concat!(
 
 pub const VS: wgpu::ShaderModuleDescriptor<'_> = wgpu::include_wgsl!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/assets/shaders/circle.fs.wgsl"
+    "/assets/shaders/circle.vs.wgsl"
 ));
 
 pub const CS: wgpu::ShaderModuleDescriptor<'_> = wgpu::include_wgsl!(concat!(

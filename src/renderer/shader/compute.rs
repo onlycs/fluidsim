@@ -33,7 +33,7 @@ impl PhysicsData {
                     count: None,
                 },
                 wgpu::BindGroupLayoutEntry {
-                    binding: 0,
+                    binding: 1,
                     visibility: wgpu::ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage { read_only: false },
@@ -43,7 +43,7 @@ impl PhysicsData {
                     count: None,
                 },
                 wgpu::BindGroupLayoutEntry {
-                    binding: 0,
+                    binding: 2,
                     visibility: wgpu::ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage { read_only: false },
@@ -53,7 +53,7 @@ impl PhysicsData {
                     count: None,
                 },
                 wgpu::BindGroupLayoutEntry {
-                    binding: 0,
+                    binding: 3,
                     visibility: wgpu::ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage { read_only: false },
