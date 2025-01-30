@@ -40,12 +40,12 @@ impl SpatialLookup {
     }
 
     /// "hash" function for a coordinate
-    fn cell_key((x, y): (isize, isize), settings: SimSettings) -> usize {
+    fn cell_key((x, y): (isize, isize), num_particles: usize) -> usize {
         // multiply x and y by two primes and add them together. mod by the number of particles so
         // we can keep the arrays the same length (compute shader friendly)
         let px = 17;
         let py = 31;
-        let num_particles = settings.particles.x * settings.particles.y;
+        let num_particles = num_particles;
         let h = (x * px + y * py).rem_euclid(num_particles as isize);
 
         h as usize
@@ -58,7 +58,7 @@ impl SpatialLookup {
             .par_iter()
             .map(|pos| {
                 let cell = Self::pos_to_cell(*pos, settings);
-                let key = Self::cell_key(cell, settings);
+                let key = Self::cell_key(cell, positions.len());
                 key
             })
             .enumerate()
@@ -110,16 +110,19 @@ pub struct Scene {
     pub velocities: Vec<Vec2>,
     pub mouse: MouseState,
     pub lookup: SpatialLookup,
-    pub settings: SimSettings,
+
+    pub simconfig: SimSettings,
+    pub init: InitialConditions,
+    pub gfx: GraphicsSettings,
 }
 
 // creation and updating scene settings, etc
 impl Scene {
     pub fn new() -> Self {
-        let settings = SimSettings::default();
-
         let mut this = Self {
-            settings,
+            simconfig: SimSettings::default(),
+            init: InitialConditions::default(),
+            gfx: GraphicsSettings::default(),
             positions: Vec::new(),
             densities: Vec::new(),
             velocities: Vec::new(),
@@ -134,21 +137,21 @@ impl Scene {
     }
 
     pub fn absbounds(&self) -> Vec2 {
-        self.settings.window_size / PX_PER_UNIT / 2.0
+        self.simconfig.window_size / PX_PER_UNIT / 2.0
     }
 
     /// organize the particles in a centered grid
     pub fn reset(&mut self) {
-        let nx = self.settings.particles.x as usize;
-        let ny = self.settings.particles.y as usize;
-        let size = self.settings.radius * 2.0;
-        let gap = self.settings.gap;
+        let nx = self.init.particles.x as usize;
+        let ny = self.init.particles.y as usize;
+        let size = self.simconfig.particle_radius * 2.0;
+        let gap = self.init.gap;
 
         // calculate the position of the top-left particle
         let topleft = -0.5
             * Vec2::new(
-                (size * nx as f32) + (gap * (nx - 1) as f32) - self.settings.radius,
-                (size * ny as f32) + (gap * (ny - 1) as f32) - self.settings.radius,
+                (size * nx as f32) + (gap * (nx - 1) as f32) - self.simconfig.particle_radius,
+                (size * ny as f32) + (gap * (ny - 1) as f32) - self.simconfig.particle_radius,
             );
 
         // clear the arrays (reset)
@@ -182,7 +185,7 @@ impl Scene {
         self.densities = vec![0.0; self.positions.len()];
 
         // update the lookup table
-        self.lookup.update(&self.positions, self.settings);
+        self.lookup.update(&self.positions, self.simconfig);
     }
 
     pub fn len(&self) -> usize {
@@ -197,8 +200,8 @@ impl Scene {
             .par_iter()
             .zip(self.velocities.par_iter_mut())
             .for_each(|(pos, vel)| {
-                let accel = Self::external_forces(self.mouse, *pos, *vel, self.settings);
-                *vel += accel * self.settings.dtime;
+                let accel = Self::external_forces(self.mouse, *pos, *vel, self.simconfig);
+                *vel += accel * self.simconfig.dtime;
             });
     }
 
@@ -219,7 +222,7 @@ impl Scene {
                 Self::density(
                     &self.predictions,
                     &self.lookup,
-                    self.settings,
+                    self.simconfig,
                     self.predictions[i],
                 )
             })
@@ -231,7 +234,7 @@ impl Scene {
         self.positions
             .par_iter_mut()
             .zip(self.velocities.par_iter())
-            .for_each(|(pos, vel)| *pos += *vel * self.settings.dtime);
+            .for_each(|(pos, vel)| *pos += *vel * self.simconfig.dtime);
     }
 
     // wall collision
@@ -242,18 +245,18 @@ impl Scene {
             .par_iter_mut()
             .zip(self.velocities.par_iter_mut())
             .for_each(|(pos, vel)| {
-                if (pos.y.abs() + self.settings.radius) > y {
+                if (pos.y.abs() + self.simconfig.particle_radius) > y {
                     let sign = pos.y.signum();
 
-                    pos.y = y * sign + self.settings.radius * -sign;
-                    vel.y *= -self.settings.collision_damping;
+                    pos.y = y * sign + self.simconfig.particle_radius * -sign;
+                    vel.y *= -self.simconfig.collision_damping;
                 }
 
-                if (pos.x.abs() + self.settings.radius) > x {
+                if (pos.x.abs() + self.simconfig.particle_radius) > x {
                     let sign = pos.x.signum();
 
-                    pos.x = x * sign + self.settings.radius * -sign;
-                    vel.x *= -self.settings.collision_damping;
+                    pos.x = x * sign + self.simconfig.particle_radius * -sign;
+                    vel.x *= -self.simconfig.collision_damping;
                 }
             });
     }
@@ -267,13 +270,13 @@ impl Scene {
                     &self.predictions,
                     &self.densities,
                     &self.lookup,
-                    self.settings,
+                    self.simconfig,
                     i,
                 );
                 force / self.densities[i]
             })
             .zip(self.velocities.par_iter_mut())
-            .for_each(|(accel, vel)| *vel += accel * self.settings.dtime);
+            .for_each(|(accel, vel)| *vel += accel * self.simconfig.dtime);
     }
 
     // make the particles resist flow
@@ -285,11 +288,11 @@ impl Scene {
                     &self.predictions,
                     &self.velocities,
                     &self.lookup,
-                    self.settings,
+                    self.simconfig,
                     i,
                 );
 
-                self.velocities[i] + accel * self.settings.dtime
+                self.velocities[i] + accel * self.simconfig.dtime
             })
             .collect();
     }
@@ -298,7 +301,7 @@ impl Scene {
     pub fn update(&mut self) {
         self.apply_external_forces();
         self.update_predictions();
-        self.lookup.update(&self.predictions, self.settings);
+        self.lookup.update(&self.predictions, self.simconfig);
         self.update_densities();
         self.apply_pressure_forces();
         self.apply_viscosity();
@@ -354,7 +357,7 @@ impl Scene {
     ) -> f32 {
         let raw = rad1(SpatialLookup::pos_to_cell(sample, settings))
             .into_iter()
-            .map(|n| SpatialLookup::cell_key(n, settings))
+            .map(|n| SpatialLookup::cell_key(n, positions.len()))
             .flat_map(|key| lookup.get_by_key(key))
             .copied()
             .map(|pidx| {
@@ -389,7 +392,7 @@ impl Scene {
         // use the spatial lookup to find the particles within the smoothing radius
         rad1(SpatialLookup::pos_to_cell(positions[particle], settings))
             .into_iter()
-            .map(|n| SpatialLookup::cell_key(n, settings))
+            .map(|n| SpatialLookup::cell_key(n, positions.len()))
             .flat_map(|key| lookup.get_by_key(key))
             .copied()
             .filter(|pidx| pidx != &particle)
@@ -423,7 +426,7 @@ impl Scene {
     ) -> Vec2 {
         let gravity = Vec2::new(0.0, settings.gravity);
 
-        if mouse.left || mouse.right {
+        if mouse.left() || mouse.right() {
             let mousepos = mouse.px / PX_PER_UNIT - settings.window_size / PX_PER_UNIT / 2.0;
             let offset = mousepos - position;
             let dist2 = offset.dot(offset);
@@ -461,7 +464,7 @@ impl Scene {
         let pos = positions[particle];
         let neighbors = rad1(SpatialLookup::pos_to_cell(pos, settings))
             .into_iter()
-            .map(|n| SpatialLookup::cell_key(n, settings))
+            .map(|n| SpatialLookup::cell_key(n, positions.len()))
             .flat_map(|key| lookup.get_by_key(key))
             .copied()
             .filter(|pidx| pidx != &particle);

@@ -15,11 +15,16 @@ struct Settings {
 	viscosity_strength: f32,
 
 	num_particles: u32,
+	particle_radius: f32,
+
+	window_size: vec2<f32>,
+	_pad: u32,
 }
 
 struct MouseState {
 	position: vec2<f32>,
 	clickmask: u32,
+	_pad: u32
 }
 
 struct Primitive {
@@ -40,5 +45,5 @@ struct Primitive {
 @group(1) @binding(3) var<storage, read_write> densities: array<f32, 16384>;
 
 // rendering
-@group(2) @binding(0) var<storage, read> primitives: array<Primitive, 16384>;
+@group(2) @binding(0) var<storage, read_write> primitives: array<Primitive, 16384>;
 

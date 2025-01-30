@@ -4,7 +4,7 @@ use egui::EguiState;
 use fps::{FpsCounter, FpsState};
 use input::{InputHelper, InputResponse};
 use panel::{Panel, UpdateData};
-use shader::VsState;
+use shader::vertex::VsState;
 use state::Game;
 use std::ops::{Deref, DerefMut};
 use wgpu::PowerPreference;
@@ -236,7 +236,7 @@ impl SimRenderer {
         let scale = self.wgpu.window.scale_factor() as f32;
 
         // apply window size
-        self.game.physics.settings.window_size = size;
+        self.game.physics.simconfig.window_size = size;
         self.shader.globals.resolution = size.to_array();
         self.wgpu.config.width = size.x as u32;
         self.wgpu.config.height = size.y as u32;
@@ -266,7 +266,7 @@ impl SimRenderer {
         self.game.update();
 
         let scene = &self.game.physics;
-        let settings = &scene.settings;
+        let settings = &scene.simconfig;
         let surface_tex = self.wgpu.surface.get_current_texture()?;
 
         let surface_view = surface_tex
@@ -340,7 +340,7 @@ impl SimRenderer {
 
         // draw egui
         {
-            let settings = &mut self.game.physics.settings;
+            let settings = &mut self.game.physics.simconfig;
             let reset = &mut self.game.reset;
             let retessellate = &mut self.shader.retessellate;
 
@@ -350,6 +350,8 @@ impl SimRenderer {
                 &surface_view,
                 self.panel.update(
                     settings,
+                    &mut self.game.physics.gfx,
+                    &mut self.game.physics.init,
                     UpdateData {
                         reset,
                         retessellate,
@@ -395,12 +397,7 @@ impl ApplicationHandler for SimRenderer {
             InputResponse::Mouse => {
                 let (x, y) = self.input.mouse_pos;
 
-                let state = MouseState {
-                    px: [x, y].into(),
-                    left: self.input.lmb,
-                    right: self.input.rmb,
-                };
-
+                let state = MouseState::new([x, y].into(), self.input.lmb, self.input.rmb);
                 self.game.physics.mouse = state;
             }
             _ => {}

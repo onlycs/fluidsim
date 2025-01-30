@@ -11,23 +11,19 @@ use lyon::{
 };
 use wgpu::{util::DeviceExt, BindGroupLayoutDescriptor, Color};
 
-use super::WgpuData;
-
-pub const PRIM_LEN: usize = 16384;
-
-pub const FS: wgpu::ShaderModuleDescriptor<'_> = wgpu::include_wgsl!("../shader/circle.fs.wgsl");
-pub const VS: wgpu::ShaderModuleDescriptor<'_> = wgpu::include_wgsl!("../shader/circle.vs.wgsl");
+use super::*;
+use renderer::WgpuData;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
-pub struct VsCirclePrimitive {
+pub struct CirclePrimitive {
     pub color: [f32; 4],
     pub translate: [f32; 2],
     pub z_index: i32,
     pub _pad: u32,
 }
 
-impl Default for VsCirclePrimitive {
+impl Default for CirclePrimitive {
     fn default() -> Self {
         Self {
             color: [0.; 4],
@@ -86,7 +82,7 @@ impl StrokeVertexConstructor<VsInput> for WithId {
 #[allow(unused)]
 pub struct VsData {
     pub globals: VsGlobals,
-    pub prims: Vec<VsCirclePrimitive>,
+    pub prims: Vec<CirclePrimitive>,
 
     pub prims_buf: wgpu::Buffer,
     pub globals_buf: wgpu::Buffer,
@@ -122,7 +118,7 @@ impl VsData {
 
             tessellator.tessellate_circle(
                 Point::new(0., 0.),
-                settings.radius * PX_PER_UNIT,
+                settings.particle_radius * PX_PER_UNIT,
                 &FillOptions::default(),
                 &mut BuffersBuilder::new(&mut tessellation_buf, WithId(0)),
             )?;
@@ -201,7 +197,7 @@ impl VsData {
             let relative = speed / MAX_VEL;
             let color = g.sample(relative.clamp(0.0, 1.0));
 
-            self.prims[i] = VsCirclePrimitive {
+            self.prims[i] = CirclePrimitive {
                 color: [
                     color.r as f32,
                     color.g as f32,
@@ -241,7 +237,7 @@ impl VsState {
 
         let prims_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("primitive buffer"),
-            size: (PRIM_LEN * std::mem::size_of::<VsCirclePrimitive>()) as u64,
+            size: (ARRAY_LEN * std::mem::size_of::<CirclePrimitive>()) as u64,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -368,7 +364,7 @@ impl VsState {
                 zoom: 1.0,
                 _pad: [0.; _],
             },
-            prims: vec![VsCirclePrimitive::default(); PRIM_LEN],
+            prims: vec![CirclePrimitive::default(); ARRAY_LEN],
             prims_buf,
             globals_buf,
             index_buf: init_ibuf,

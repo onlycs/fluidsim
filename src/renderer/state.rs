@@ -49,20 +49,20 @@ impl Game {
         }
 
         if self.time.step {
-            self.physics.settings.dtime = self.physics.settings.step_time / 1e3;
+            self.physics.simconfig.dtime = self.physics.gfx.step_time / 1e3;
         } else {
             let el = self.time.last_instant.elapsed().as_secs_f32();
-            let speed = self.physics.settings.speed;
-            let sspf = self.physics.settings.steps_per_frame;
+            let speed = self.physics.gfx.speed;
+            let sspf = self.physics.gfx.steps_per_frame;
             let maxed = (el * speed / sspf as f32).min(1. / 90.);
 
-            self.physics.settings.dtime = maxed;
+            self.physics.simconfig.dtime = maxed;
         }
 
         self.time.last_instant = Instant::now();
 
         if !self.time.paused || self.time.step {
-            for _ in 0..self.physics.settings.steps_per_frame {
+            for _ in 0..self.physics.gfx.steps_per_frame {
                 self.physics.update();
             }
 
