@@ -276,7 +276,6 @@ impl SimRenderer {
     fn draw(&mut self) -> Result<(), DrawError> {
         let device = &self.wgpu.device;
 
-        let settings = &self.compute.user.settings;
         let surface_tex = self.wgpu.surface.get_current_texture()?;
 
         let surface_view = surface_tex
@@ -300,7 +299,10 @@ impl SimRenderer {
             label: Some("circle command encoder"),
         });
 
-        self.shader.update(&self.wgpu, *settings)?;
+        self.compute
+            .update(&self.wgpu.queue, &self.game.init, &mut encoder);
+
+        self.shader.update(&self.wgpu, self.compute.user.settings)?;
 
         self.wgpu.queue.write_buffer(
             &self.shader.globals_buf,
@@ -316,7 +318,7 @@ impl SimRenderer {
                     view: &msaa_view,
                     resolve_target: Some(&surface_view),
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -375,6 +377,7 @@ impl SimRenderer {
         }
 
         self.wgpu.queue.submit(Some(encoder.finish()));
+        self.wgpu.device.poll(wgpu::Maintain::Wait);
         surface_tex.present();
 
         Ok(())
@@ -401,7 +404,7 @@ impl ApplicationHandler for SimRenderer {
                         }
                         KeyCode::Space => self.game.time.play_pause(),
                         KeyCode::ArrowRight => self.game.time.step(),
-                        KeyCode::KeyR => self.game.reset = true,
+                        KeyCode::KeyR => self.compute.update.reset = true,
                         KeyCode::KeyC => self.panel.toggle_self(),
                         KeyCode::KeyH => self.panel.toggle_help(),
                         _ => {}

@@ -1,6 +1,6 @@
 use std::ops::{Deref, DerefMut};
 
-use crate::{gradient::LinearGradient, prelude::*};
+use crate::prelude::*;
 use bytemuck::{Pod, Zeroable};
 use lyon::{
     geom::Point,
@@ -9,7 +9,7 @@ use lyon::{
         StrokeVertex, StrokeVertexConstructor, TessellationError, VertexBuffers,
     },
 };
-use wgpu::{util::DeviceExt, BindGroupLayoutDescriptor, Color};
+use wgpu::{util::DeviceExt, BindGroupLayoutDescriptor};
 
 use super::*;
 use renderer::WgpuData;
@@ -79,25 +79,18 @@ impl StrokeVertexConstructor<VsInput> for WithId {
     }
 }
 
-#[allow(unused)]
 pub struct VsData {
     pub globals: VsGlobals,
 
-    pub prims_buf: Arc<wgpu::Buffer>,
     pub globals_buf: wgpu::Buffer,
 
     pub index_buf: wgpu::Buffer,
     pub vertex_buf: wgpu::Buffer,
-    pub tesselation_buf: VertexBuffers<VsInput, u16>,
+    pub tessellation_buf: VertexBuffers<VsInput, u16>,
 
-    pub bind_group_layout: wgpu::BindGroupLayout,
     pub bind_group: wgpu::BindGroup,
 
-    pub pipeline_layout: wgpu::PipelineLayout,
     pub pipeline: wgpu::RenderPipeline,
-
-    pub fs: wgpu::ShaderModule,
-    pub vs: wgpu::ShaderModule,
 
     pub retessellate: bool,
 }
@@ -131,7 +124,7 @@ impl VsData {
 
             self.index_buf = init_ibuf;
             self.vertex_buf = init_vbuf;
-            self.tesselation_buf = tessellation_buf;
+            self.tessellation_buf = tessellation_buf;
             self.retessellate = false;
         }
 
@@ -165,20 +158,20 @@ impl VsState {
         let device = &wgpu.device;
 
         let globals_buf = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("globals buffer"),
+            label: Some("vs::globals"),
             size: std::mem::size_of::<VsGlobals>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        let init_ibuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("index buffer init"),
+        let index_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("vs::index_buf"),
             contents: bytemuck::cast_slice(&tessellation_buf.indices),
             usage: wgpu::BufferUsages::INDEX,
         });
 
-        let init_vbuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("vertex buffer init"),
+        let vertex_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("vs::vertex_buf"),
             contents: bytemuck::cast_slice(&tessellation_buf.vertices),
             usage: wgpu::BufferUsages::VERTEX,
         });
@@ -187,7 +180,7 @@ impl VsState {
         let vs = device.create_shader_module(VS);
 
         let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            label: Some("buffers layout"),
+            label: Some("vs$layout"),
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
@@ -213,7 +206,7 @@ impl VsState {
         });
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("buffers bind group"),
+            label: Some("vs$group"),
             layout: &bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
@@ -230,7 +223,7 @@ impl VsState {
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[&bind_group_layout],
             push_constant_ranges: &[],
-            label: Some("circle pipeline layout"),
+            label: Some("vs$pipeline_layout"),
         });
 
         let fs_targets = [Some(wgpu::ColorTargetState {
@@ -240,7 +233,7 @@ impl VsState {
         })];
 
         let pipeline_desc = wgpu::RenderPipelineDescriptor {
-            label: Some("circle pipeline"),
+            label: Some("vs$pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &vs,
@@ -286,17 +279,12 @@ impl VsState {
                 zoom: 1.0,
                 _pad: [0.; _],
             },
-            prims_buf,
             globals_buf,
-            index_buf: init_ibuf,
-            vertex_buf: init_vbuf,
-            tesselation_buf: tessellation_buf,
-            bind_group_layout,
+            index_buf,
+            vertex_buf,
+            tessellation_buf,
             bind_group,
-            pipeline_layout,
             pipeline,
-            fs,
-            vs,
             retessellate: true,
         });
 

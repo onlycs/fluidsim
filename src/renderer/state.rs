@@ -23,7 +23,6 @@ impl TimeState {
 
 pub struct GameState {
     pub time: TimeState,
-    pub reset: bool,
     pub gfx: GraphicsSettings,
     pub init: InitialConditions,
 }
@@ -38,7 +37,6 @@ impl GameState {
                 step: false,
                 last_instant: Instant::now(),
             },
-            reset: false,
         }
     }
 }

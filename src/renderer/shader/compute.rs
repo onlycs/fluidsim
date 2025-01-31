@@ -7,6 +7,8 @@ use std::ops::{Deref, DerefMut};
 use super::vertex::CirclePrimitive;
 use super::*;
 
+pub const WORKGROUP_SIZE: u32 = 64;
+
 pub struct PhysicsData {
     pub positions: Vec<[f32; 2]>,
     pub predictions: Vec<[f32; 2]>,
@@ -256,7 +258,9 @@ impl SharedRenderingData {
         device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("physics::shared_data::prims"),
             size: (mem::size_of::<CirclePrimitive>() * ARRAY_LEN) as u64,
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         })
     }
@@ -319,9 +323,11 @@ pub struct ComputeData {
     pub shared: SharedRenderingData,
 
     pub buffers: Buffers,
-    pub bind_layouts: BindGroupLayouts,
     pub bind_groups: BindGroups,
     pub update: UpdateState,
+
+    pub pipeline: wgpu::ComputePipeline,
+    pub pass_desc: wgpu::ComputePassDescriptor<'static>,
 }
 
 // creation and updating scene settings, etc
@@ -368,14 +374,43 @@ impl ComputeData {
             rendering: rendering_bg,
         };
 
+        let shader = device.create_shader_module(CS);
+
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("physics$layout"),
+            bind_group_layouts: &[
+                &bind_layouts.user,
+                &bind_layouts.physics,
+                &bind_layouts.rendering,
+            ],
+            push_constant_ranges: &[],
+        });
+
+        let pipeline_desc = wgpu::ComputePipelineDescriptor {
+            label: Some("physics$pipeline"),
+            layout: Some(&layout),
+            module: &shader,
+            entry_point: Some("main"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            cache: None,
+        };
+
+        let pass = wgpu::ComputePassDescriptor {
+            label: Some("physics$pass"),
+            timestamp_writes: None,
+        };
+
+        let pipeline = device.create_compute_pipeline(&pipeline_desc);
+
         let this = Self {
             physics,
             user,
             shared,
             buffers,
-            bind_layouts,
             bind_groups,
             update: Default::default(),
+            pipeline,
+            pass_desc: pass,
         };
 
         this
@@ -386,16 +421,16 @@ impl ComputeData {
     }
 
     pub fn reset(&mut self, conditions: &InitialConditions) {
-        let nx = conditions.particles.x as usize;
-        let ny = conditions.particles.y as usize;
+        let nx = conditions.particles.x;
+        let ny = conditions.particles.y;
         let size = self.user.settings.particle_radius * 2.0;
         let gap = conditions.gap;
 
         // calculate the position of the top-left particle
         let topleft = -0.5
             * Vec2::new(
-                (size * nx as f32) + (gap * (nx - 1) as f32) - self.user.settings.particle_radius,
-                (size * ny as f32) + (gap * (ny - 1) as f32) - self.user.settings.particle_radius,
+                (size * nx) + (gap * (nx - 1.)) - self.user.settings.particle_radius,
+                (size * ny) + (gap * (ny - 1.)) - self.user.settings.particle_radius,
             );
 
         // clear all
@@ -407,20 +442,16 @@ impl ComputeData {
 
         // create the particles
         let mut ctr = 0;
-        for i in 0..nx {
-            for j in 0..ny {
+        for i in 0..nx as usize {
+            for j in 0..ny as usize {
                 let offset = Vec2::new(
                     size * i as f32 + gap * i as f32,
                     size * j as f32 + gap * j as f32,
                 );
 
-                // add a small random offset to the position because this engine is very deterministic
-                let urandom = Vec2::new(
-                    (0.5 - rand::random::<f32>()) / 10.,
-                    (0.5 - rand::random::<f32>()) / 10.,
-                );
-
-                let pos = topleft + offset + urandom;
+                // add a small random offset to the position because this engine is deterministic
+                let random = Vec2::new(0.5 - rand::random::<f32>(), 0.5 - rand::random::<f32>());
+                let pos = topleft + offset + random / 25.;
 
                 self.physics.positions[ctr] = [pos.x, pos.y];
                 ctr += 1;
@@ -429,7 +460,12 @@ impl ComputeData {
     }
 
     // TODO: compute
-    pub fn update(&mut self, queue: &wgpu::Queue, conditions: &InitialConditions) {
+    pub fn update(
+        &mut self,
+        queue: &wgpu::Queue,
+        conditions: &InitialConditions,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
         if self.update.reset {
             self.reset(&conditions);
 
@@ -487,6 +523,20 @@ impl ComputeData {
 
             self.update.mouse = false;
         }
+
+        let mut pass = encoder.begin_compute_pass(&self.pass_desc);
+
+        pass.set_pipeline(&self.pipeline);
+        pass.set_bind_group(0, &self.bind_groups.user, &[]);
+        pass.set_bind_group(1, &self.bind_groups.physics, &[]);
+        pass.set_bind_group(2, &self.bind_groups.rendering, &[]);
+        pass.dispatch_workgroups(
+            (self.user.settings.num_particles + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE,
+            1,
+            1,
+        );
+
+        drop(pass);
     }
 }
 

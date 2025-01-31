@@ -1,8 +1,6 @@
 pub(super) mod compute;
 pub(super) mod vertex;
 
-pub const SHADER_DIR: &str = env!("CARGO_MANIFEST_DIR");
-
 pub const FS: wgpu::ShaderModuleDescriptor<'_> = wgpu::include_wgsl!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/assets/shaders/circle.fs.wgsl"

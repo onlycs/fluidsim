@@ -47,3 +47,18 @@ struct Primitive {
 // rendering
 @group(2) @binding(0) var<storage, read_write> primitives: array<Primitive, 16384>;
 
+const SCALE: f32 = 100.0;
+
+@compute
+@workgroup_size(64)
+fn main(
+	@builtin(global_invocation_id) id: vec3<u32>
+) {
+	let index = id.x;
+	if (index >= settings.num_particles) {
+		return;
+	}
+
+	primitives[index].translate = positions[index] * SCALE;
+	primitives[index].color = vec4<f32>(1.0, 0.0, 0.0, 1.0);
+}

@@ -23,7 +23,7 @@ pub struct RawSimSettings {
     particle_radius: f32,
 
     window_size: [f32; 2],
-    _pad: u32,
+    _pad: [u32; 2],
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -82,7 +82,7 @@ impl SimSettings {
             particle_radius: self.particle_radius,
 
             window_size: [self.window_size.x, self.window_size.y],
-            _pad: 0,
+            _pad: [0; 2],
         }
     }
 }
