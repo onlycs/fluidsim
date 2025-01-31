@@ -19,7 +19,6 @@ impl Default for Panel {
 
 #[derive(Debug)]
 pub struct UpdateData<'a> {
-    pub comp_update: &'a mut bool,
     pub reset: &'a mut bool,
     pub retessellate: &'a mut bool,
 }
@@ -36,7 +35,6 @@ impl Panel {
         let UpdateData {
             reset,
             retessellate,
-            comp_update,
         } = update;
 
         |ctx: &Context| {
@@ -59,60 +57,39 @@ impl Panel {
                 ui.add_space(25.0);
                 ui.label(RichText::new("Physics Settings").size(TEXT_SIZE).strong());
 
-                *comp_update |= ui
-                    .add(Slider::new(&mut sim.gravity, -20.0..=20.0).text("Gravity"))
-                    .changed();
+                ui.add(Slider::new(&mut sim.gravity, -20.0..=20.0).text("Gravity"));
 
-                *comp_update |= ui
-                    .add(
-                        Slider::new(&mut sim.collision_damping, 0.0..=1.0)
-                            .text("Collision Dampening"),
-                    )
-                    .changed();
+                ui.add(
+                    Slider::new(&mut sim.collision_damping, 0.0..=1.0).text("Collision Dampening"),
+                );
 
                 ui.add_space(25.0);
                 ui.label(RichText::new("SPH Settings").size(TEXT_SIZE).strong());
 
-                *comp_update |= ui
-                    .add(
-                        Slider::new(&mut sim.smoothing_radius, 0.01..=4.0).text("Smoothing Radius"),
-                    )
-                    .changed();
+                ui.add(Slider::new(&mut sim.smoothing_radius, 0.01..=4.0).text("Smoothing Radius"));
 
-                *comp_update |= ui
-                    .add(Slider::new(&mut sim.target_density, 0.0..=200.0).text("Target Density"))
-                    .changed();
+                ui.add(Slider::new(&mut sim.target_density, 0.0..=200.0).text("Target Density"));
 
-                *comp_update |= ui
-                    .add(
-                        Slider::new(&mut sim.pressure_multiplier, 0.0..=300.0)
-                            .text("Pressure Multiplier"),
-                    )
-                    .changed();
+                ui.add(
+                    Slider::new(&mut sim.pressure_multiplier, 0.0..=300.0)
+                        .text("Pressure Multiplier"),
+                );
 
-                *comp_update |= ui
-                    .add(
-                        Slider::new(&mut sim.viscosity_strength, 0.0..=1.0)
-                            .text("Viscosity Strength"),
-                    )
-                    .changed();
+                ui.add(
+                    Slider::new(&mut sim.viscosity_strength, 0.0..=1.0).text("Viscosity Strength"),
+                );
 
                 ui.add_space(25.0);
                 ui.label(RichText::new("Mouse Settings").size(TEXT_SIZE).strong());
 
-                *comp_update |= ui
-                    .add(
-                        Slider::new(&mut sim.interaction_radius, 0.0..=10.0)
-                            .text("Interaction Radius"),
-                    )
-                    .changed();
+                ui.add(
+                    Slider::new(&mut sim.interaction_radius, 0.0..=10.0).text("Interaction Radius"),
+                );
 
-                *comp_update |= ui
-                    .add(
-                        Slider::new(&mut sim.interaction_strength, 0.0..=100.0)
-                            .text("Interaction Strength"),
-                    )
-                    .changed();
+                ui.add(
+                    Slider::new(&mut sim.interaction_strength, 0.0..=100.0)
+                        .text("Interaction Strength"),
+                );
 
                 ui.add_space(25.0);
                 ui.label(RichText::new("Initial Conditions").size(TEXT_SIZE).strong());
@@ -164,10 +141,6 @@ impl Panel {
                         window_size: sim.window_size,
                         ..SimSettings::zero_gravity()
                     };
-                }
-
-                if *reset || *retessellate {
-                    *comp_update = true;
                 }
 
                 if self.show_help {

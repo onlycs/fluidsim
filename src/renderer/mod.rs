@@ -249,7 +249,6 @@ impl SimRenderer {
 
         // apply window size
         self.compute.user.settings.window_size = size;
-        self.compute.update.settings = true;
         self.shader.globals.resolution = size.to_array();
         self.wgpu.config.width = size.x as u32;
         self.wgpu.config.height = size.y as u32;
@@ -299,8 +298,12 @@ impl SimRenderer {
             label: Some("circle command encoder"),
         });
 
-        self.compute
-            .update(&self.wgpu.queue, &self.game.init, &mut encoder);
+        if self.game.can_update() || self.compute.update.reset {
+            let dtime = self.game.dtime();
+
+            self.compute
+                .update(&self.wgpu.queue, &self.game.init, &mut encoder, dtime);
+        }
 
         self.shader.update(&self.wgpu, self.compute.user.settings)?;
 
@@ -347,12 +350,7 @@ impl SimRenderer {
         // draw egui
         {
             let ComputeData {
-                update:
-                    compute::UpdateState {
-                        settings: settings_up,
-                        reset,
-                        ..
-                    },
+                update: compute::UpdateState { reset, .. },
                 user: compute::UserData { settings, .. },
                 ..
             } = &mut *self.compute;
@@ -368,7 +366,6 @@ impl SimRenderer {
                     &mut self.game.gfx,
                     &mut self.game.init,
                     UpdateData {
-                        comp_update: settings_up,
                         reset,
                         retessellate,
                     },

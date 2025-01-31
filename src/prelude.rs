@@ -1,6 +1,5 @@
 pub(crate) use crate::{
     error::*,
-    physics::Scene,
     renderer,
     state::{config::*, mouse::*},
 };

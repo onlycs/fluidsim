@@ -54,7 +54,7 @@ impl MouseState {
         self.clickmask = (left as u32) | ((right as u32) << 1);
     }
 
-    pub fn into_raw(&self) -> RawMouseState {
+    pub fn to_raw(&self) -> RawMouseState {
         RawMouseState {
             position: [self.px.x, self.px.y],
             clickmask: self.clickmask,

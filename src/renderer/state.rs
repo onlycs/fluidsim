@@ -39,4 +39,24 @@ impl GameState {
             },
         }
     }
+
+    pub fn can_update(&mut self) -> bool {
+        if self.time.paused {
+            if self.time.step {
+                self.time.step = false;
+                true
+            } else {
+                false
+            }
+        } else {
+            true
+        }
+    }
+
+    pub fn dtime(&mut self) -> f32 {
+        let now = Instant::now();
+        let dtime = now.duration_since(self.time.last_instant).as_secs_f64();
+        self.time.last_instant = now;
+        dtime as f32 * self.gfx.speed
+    }
 }

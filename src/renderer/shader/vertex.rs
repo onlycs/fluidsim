@@ -23,6 +23,17 @@ pub struct CirclePrimitive {
     pub _pad: u32,
 }
 
+impl CirclePrimitive {
+    pub const fn default() -> Self {
+        Self {
+            color: [0.; 4],
+            translate: [0.; 2],
+            z_index: 0,
+            _pad: 0,
+        }
+    }
+}
+
 impl Default for CirclePrimitive {
     fn default() -> Self {
         Self {

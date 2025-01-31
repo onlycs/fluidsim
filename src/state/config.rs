@@ -61,7 +61,7 @@ impl SimSettings {
         }
     }
 
-    pub fn into_raw(&self) -> RawSimSettings {
+    pub fn to_raw(&self) -> RawSimSettings {
         RawSimSettings {
             dtime: self.dtime,
 
