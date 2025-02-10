@@ -45,7 +45,6 @@ impl SpatialLookup {
         // we can keep the arrays the same length (compute shader friendly)
         let px = 17;
         let py = 31;
-        let num_particles = num_particles;
         let h = (x * px + y * py).rem_euclid(num_particles as isize);
 
         h as usize
@@ -427,7 +426,7 @@ impl Scene {
         let gravity = Vec2::new(0.0, settings.gravity);
 
         if mouse.left() || mouse.right() {
-            let mousepos = mouse.px / PX_PER_UNIT - settings.window_size / PX_PER_UNIT / 2.0;
+            let mousepos = mouse.position / PX_PER_UNIT - settings.window_size / PX_PER_UNIT / 2.0;
             let offset = mousepos - position;
             let dist2 = offset.dot(offset);
 

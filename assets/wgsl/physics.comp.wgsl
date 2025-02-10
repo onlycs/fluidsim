@@ -1,4 +1,6 @@
-struct Settings {
+#import prims::Primitive;
+
+@export struct Settings {
 	dtime: f32,
 	
 	gravity: f32,
@@ -21,46 +23,42 @@ struct Settings {
 	_pad: u32,
 }
 
-struct MouseState {
+@export struct MouseState {
 	position: vec2<f32>,
 	clickmask: u32,
 	_pad: u32
 }
 
-struct Primitive {
-    color: vec4<f32>,
-    translate: vec2<f32>,
-    z_index: i32,
-	_pad: u32,
-}
+
+// constants
+const SCALE: f32 = 100.0;
+const ARRAY_LEN: u32 = 16384u;
 
 // user configurable/mutable stuff
 @group(0) @binding(0) var<uniform> settings: Settings;
 @group(0) @binding(1) var<uniform> mouse: MouseState;
 
 // simulation
-@group(1) @binding(0) var<storage, read_write> positions: array<vec2<f32>>;
-@group(1) @binding(2) var<storage, read_write> predictions: array<vec2<f32>>;
-@group(1) @binding(1) var<storage, read_write> velocities: array<vec2<f32>>;
-@group(1) @binding(3) var<storage, read_write> densities: array<f32>;
+@group(1) @binding(0) var<storage, read_write> positions: array<vec2<f32>, ARRAY_LEN>;
+@group(1) @binding(2) var<storage, read_write> predictions: array<vec2<f32>, ARRAY_LEN>;
+@group(1) @binding(1) var<storage, read_write> velocities: array<vec2<f32>, ARRAY_LEN>;
+@group(1) @binding(3) var<storage, read_write> densities: array<f32, ARRAY_LEN>;
 
 // rendering
-@group(2) @binding(0) var<storage, read_write> primitives: array<Primitive>;
+@group(2) @binding(0) var<storage, read_write> primitives: array<Primitive, ARRAY_LEN>;
 
 // spatial hash
 @group(3) @binding(0) var<storage, read_write> lookup: array<u32>;
 @group(3) @binding(1) var<storage, read_write> starts: array<u32>;
 
-// constants
-const SCALE: f32 = 100.0;
 
 // mouse utils
 fn mouse_left() -> bool {
-	return (mouse.clickmask & 1) != 0;
+	return (mouse.clickmask & 1u) != 0u;
 }
 
 fn mouse_right() -> bool {
-	return (mouse.clickmask & 2) != 0;
+	return (mouse.clickmask & 2u) != 0u;
 }
 
 fn mouse_intensity() -> f32 {
@@ -72,6 +70,73 @@ fn mouse_intensity() -> f32 {
 		return 1.0;
 	} else {
 		return -1.0;
+	}
+}
+
+// spatial hash utils
+fn rad1(pos: vec2<f32>) -> array<vec2<f32>, 9> {
+	// 3x3 grid of particles
+	return array<vec2<f32>, 9>(
+		vec2<f32>(pos.x - 1.0, pos.y - 1.0),
+		vec2<f32>(pos.x - 1.0, pos.y),
+		vec2<f32>(pos.x - 1.0, pos.y + 1.0),
+		vec2<f32>(pos.x, pos.y - 1.0),
+		vec2<f32>(pos.x, pos.y),
+		vec2<f32>(pos.x, pos.y + 1.0),
+		vec2<f32>(pos.x + 1.0, pos.y - 1.0),
+		vec2<f32>(pos.x + 1.0, pos.y),
+		vec2<f32>(pos.x + 1.0, pos.y + 1.0)
+	);
+}
+
+fn pos_to_cell(pos: vec2<f32>) -> vec2<i32> {
+	let cell_size = f32(settings.smoothing_radius);
+	let x = floor(pos.x / cell_size);
+	let y = floor(pos.y / cell_size);
+
+	return vec2<i32>(i32(x), i32(y));
+}
+
+fn true_mod(a: i32, b: i32) -> i32 {
+	return (a % b + b) % b;
+}
+
+fn cell_key(cell: vec2<i32>) -> u32 {
+	let px: i32 = 17;
+	let py: i32 = 31;
+
+	let h = true_mod((cell.x * px) + (cell.y * py), i32(settings.num_particles));
+	return u32(h);
+}
+
+@compute
+@workgroup_size(1)
+fn update_lookup() {
+	var lookup_unsorted: array<vec2<u32>, ARRAY_LEN> = array<vec2<u32>, ARRAY_LEN>();
+
+	for (var i: u32 = 0u; i < settings.num_particles; i = i + 1u) {
+		let pos = positions[i];
+		let cell = pos_to_cell(pos);
+		let key = cell_key(cell);
+
+		lookup_unsorted[i] = vec2<u32>(i, key);
+	}
+
+	// sort by key
+	for (var i: u32 = 0u; i < settings.num_particles; i = i + 1u) {
+		for (var j: u32 = i + 1u; j < settings.num_particles; j = j + 1u) {
+			if (lookup_unsorted[i].y > lookup_unsorted[j].y) {
+				let tmp = lookup_unsorted[i];
+				lookup_unsorted[i] = lookup_unsorted[j];
+				lookup_unsorted[j] = tmp;
+			}
+		}
+	}
+
+	var keys: array<u32, ARRAY_LEN> = array<u32, ARRAY_LEN>();
+	for (var i: u32 = 0u; i < settings.num_particles; i += 1u) {
+		lookup[i] = lookup_unsorted[i].x;
+		keys[i] = lookup_unsorted[i].y;
 	}
 }
 

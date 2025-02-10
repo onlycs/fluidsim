@@ -1,3 +1,5 @@
+#define_import_path fragment;
+
 struct Output {
     @location(0) out_color: vec4<f32>,
 };

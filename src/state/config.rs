@@ -1,54 +1,7 @@
 use crate::prelude::*;
-use bytemuck::{Pod, Zeroable};
+use bytemuck::Zeroable;
 
-#[derive(Clone, Copy, Debug, PartialEq, Pod, Zeroable)]
-#[repr(C)]
-pub struct RawSimSettings {
-    dtime: f32,
-
-    gravity: f32,
-    collision_damping: f32,
-
-    smoothing_radius: f32,
-    target_density: f32,
-    pressure_multiplier: f32,
-    mass: f32,
-
-    interaction_radius: f32,
-    interaction_strength: f32,
-
-    viscosity_strength: f32,
-
-    num_particles: u32,
-    particle_radius: f32,
-
-    window_size: [f32; 2],
-    _pad: [u32; 2],
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-#[repr(C)]
-pub struct SimSettings {
-    pub dtime: f32,
-
-    pub gravity: f32,
-    pub collision_damping: f32,
-
-    pub smoothing_radius: f32,
-    pub target_density: f32,
-    pub pressure_multiplier: f32,
-    pub mass: f32,
-
-    pub interaction_radius: f32,
-    pub interaction_strength: f32,
-
-    pub viscosity_strength: f32,
-
-    pub num_particles: u32,
-    pub particle_radius: f32,
-
-    pub window_size: Vec2,
-}
+pub type SimSettings = crate::renderer::wgsl_compute::types::Settings;
 
 impl SimSettings {
     pub fn zero_gravity() -> Self {
@@ -58,31 +11,6 @@ impl SimSettings {
             pressure_multiplier: 20.0,
             viscosity_strength: 0.5,
             ..Default::default()
-        }
-    }
-
-    pub fn to_raw(&self) -> RawSimSettings {
-        RawSimSettings {
-            dtime: self.dtime,
-
-            gravity: self.gravity,
-            collision_damping: self.collision_damping,
-
-            smoothing_radius: self.smoothing_radius,
-            target_density: self.target_density,
-            pressure_multiplier: self.pressure_multiplier,
-            mass: self.mass,
-
-            interaction_radius: self.interaction_radius,
-            interaction_strength: self.interaction_strength,
-
-            viscosity_strength: self.viscosity_strength,
-
-            num_particles: self.num_particles,
-            particle_radius: self.particle_radius,
-
-            window_size: [self.window_size.x, self.window_size.y],
-            _pad: [0; 2],
         }
     }
 }
@@ -120,6 +48,8 @@ impl Default for SimSettings {
 
             mass: 1.0,
             particle_radius: 0.035,
+
+            ..Self::zeroed()
         }
     }
 }

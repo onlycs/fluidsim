@@ -249,7 +249,7 @@ impl SimRenderer {
 
         // apply window size
         self.compute.user.settings.window_size = size;
-        self.shader.globals.resolution = size.to_array();
+        self.shader.globals.resolution = size;
         self.wgpu.config.width = size.x as u32;
         self.wgpu.config.height = size.y as u32;
 
@@ -472,133 +472,7 @@ impl ApplicationHandler for SimRenderer {
     }
 }
 
-// impl State {
-//     /// Update the panel (mouse/keyboard) as well as sending good mouse data
-//     fn update(&mut self, ctx: &mut ggez::Context) -> Result<(), ggez::GameError> {
-//         let propagate = !self.panel.update(ctx);
-
-//         let mouse = &ctx.mouse;
-//         let left_pressed = mouse.button_pressed(MouseButton::Left) && propagate;
-//         let any_pressed = (mouse.button_pressed(MouseButton::Right) || left_pressed) && propagate;
-//         let data = any_pressed.then_some(MouseState {
-//             px: mouse.position().into(),
-//             is_left: left_pressed,
-//         });
-
-//         if data != self.mouse {
-//             self.mouse = data;
-//             ipc::physics_send(ToPhysics::UpdateMouse(data));
-//         }
-
-//         Ok(())
-//     }
-
-//     fn draw(&mut self, ctx: &mut ggez::Context) -> Result<(), ggez::GameError> {
-//         let (width, height) = ctx.gfx.drawable_size();
-//         let (halfw, halfh) = (width / 2., height / 2.);
-
-//         // create and setup the canvas
-//         let mut canvas = graphics::Canvas::from_frame(ctx, graphics::Color::BLACK);
-
-//         // make the center at zero,zero to make my life easier
-//         canvas.set_screen_coordinates(graphics::Rect::new(
-//             -width / 2.0,
-//             -height / 2.0,
-//             width,
-//             height,
-//         ));
-
-//         // grab the current scene and create a mesh
-//         let sc = self.physics.get();
-//         let mut mesh = graphics::MeshBuilder::new();
-
-//         // draw to mesh from scene
-//         sc.draw(&mut mesh)?;
-
-//         // draw the mesh to the canvas
-//         canvas.draw(&graphics::Mesh::from_data(ctx, mesh.build()), Vec2::ZERO);
-
-//         // draw the panel to the canvas
-//         canvas.draw(&*self.panel, DrawParam::new().dest([-halfw, -halfh]));
-
-//         // draw the current fps
-//         let (ref mut old_tps, ref mut old_count) = self.tps_data;
-
-//         let fps = format!("Rendering FPS: {:.2}", ctx.time.fps());
-//         let physics_fps = format!(
-//             "Physics TPS: {}",
-//             if *old_count >= 10 {
-//                 *old_tps = self.physics.tps();
-//                 *old_count = 0;
-//                 self.physics.tps()
-//             } else {
-//                 *old_count += 1;
-//                 *old_tps
-//             }
-//         );
-
-//         let fps_text = graphics::Text::new(fps);
-//         let physics_fps_text = graphics::Text::new(physics_fps);
-
-//         let fps_dest = Vec2::new(-halfw + 10.0, halfh - 20.0);
-//         let physics_fps_dest = Vec2::new(-halfw + 10.0, halfh - 40.0);
-
-//         canvas.draw(&fps_text, fps_dest);
-//         canvas.draw(&physics_fps_text, physics_fps_dest);
-
-//         canvas.finish(ctx)?;
-
-//         ggez::timer::yield_now();
-
-//         Ok(())
-//     }
-
-//     fn resize_event(
-//         &mut self,
-//         ctx: &mut ggez::Context,
-//         width: f32,
-//         height: f32,
-//     ) -> Result<(), ggez::GameError> {
-//         let Some(wpos) = self.panel.update_wpos(ctx)? else {
-//             return Ok(());
-//         };
-
-//         let wsize = Vec2::new(width, height);
-//         self.panel.set_window(wsize, wpos);
-
-//         Ok(())
-//     }
-
-//     fn key_down_event(
-//         &mut self,
-//         ctx: &mut ggez::Context,
-//         input: KeyInput,
-//         _repeated: bool,
-//     ) -> Result<(), ggez::GameError> {
-//         let PhysicalKey::Code(kc) = input.event.physical_key else {
-//             return Ok(());
-//         };
-
-//         match kc {
-//             KeyCode::Space => ipc::physics_send(ToPhysics::Pause),
-//             KeyCode::ArrowRight => ipc::physics_send(ToPhysics::Step),
-//             KeyCode::KeyR => ipc::physics_send(ToPhysics::Reset),
-//             KeyCode::KeyC => {
-//                 debug!("Toggling config panel");
-//                 self.panel.toggle();
-//             }
-//             KeyCode::KeyH => {
-//                 debug!("Toggling help text");
-//                 self.panel.toggle_help();
-//             }
-//             KeyCode::KeyQ if input.mods.control_key() => {
-//                 info!("Got ctrl+q, quitting!");
-//                 ipc::physics_send(ToPhysics::Kill);
-//                 ctx.request_quit();
-//             }
-//             _ => (),
-//         }
-
-//         Ok(())
-//     }
-// }
+pub use shader::{
+    compute::wgsl_compute,
+    vertex::{wgsl_fragment, wgsl_prims, wgsl_vertex},
+};

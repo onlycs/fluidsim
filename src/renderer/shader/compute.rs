@@ -1,15 +1,29 @@
+use bytemuck::Zeroable;
+
 use crate::prelude::*;
 use crate::renderer::WgpuData;
 use core::f32;
+use std::borrow::Cow;
 use std::mem;
 use std::ops::{Deref, DerefMut};
 
-use super::vertex::CirclePrimitive;
+use super::vertex::VsCirclePrimitive;
 use super::*;
 
 pub const WORKGROUP_SIZE: u32 = 64;
 
 pub struct PhysicsData;
+
+#[include_wgsl_oil::include_wgsl_oil(
+    path = "assets/wgsl/physics.comp.wgsl",
+    includes = ["assets/wgsl"]
+)]
+pub mod wgsl_compute {}
+
+pub const CS: wgpu::ShaderModuleDescriptor = wgpu::ShaderModuleDescriptor {
+    label: Some("circle$compute"),
+    source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(wgsl_compute::SOURCE)),
+};
 
 impl PhysicsData {
     pub fn bind_group_layout(
@@ -185,7 +199,7 @@ impl UserData {
         [
             device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("physics::user_data::settings"),
-                size: mem::size_of::<RawSimSettings>() as u64,
+                size: mem::size_of::<SimSettings>() as u64 + 4,
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             }),
@@ -239,7 +253,7 @@ impl SharedRenderingData {
     pub fn buffers(device: &wgpu::Device) -> wgpu::Buffer {
         device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("physics::shared_data::prims"),
-            size: (mem::size_of::<CirclePrimitive>() * ARRAY_LEN) as u64,
+            size: (mem::size_of::<VsCirclePrimitive>() * ARRAY_LEN) as u64,
             usage: wgpu::BufferUsages::STORAGE
                 | wgpu::BufferUsages::COPY_SRC
                 | wgpu::BufferUsages::COPY_DST,
@@ -404,11 +418,11 @@ impl ComputeData {
         let [lookup, starts] = spatial_buffers;
 
         // initialize the buffers
-        let empty_prims = vec![CirclePrimitive::default(); ARRAY_LEN];
+        let empty_prims = vec![VsCirclePrimitive::zeroed(); ARRAY_LEN];
         let empty_vec2s = vec![[0f32; 2]; ARRAY_LEN];
         let empty_f32s = vec![0f32; ARRAY_LEN];
 
-        queue.write_buffer(&settings, 0, bytemuck::cast_slice(&[usr.settings.to_raw()]));
+        queue.write_buffer(&settings, 0, bytemuck::cast_slice(&[usr.settings]));
         queue.write_buffer(&mouse, 0, bytemuck::cast_slice(&[usr.mouse.to_raw()]));
         queue.write_buffer(&positions, 0, bytemuck::cast_slice(&empty_vec2s));
         queue.write_buffer(&predictions, 0, bytemuck::cast_slice(&empty_vec2s));
@@ -557,7 +571,7 @@ impl ComputeData {
         queue.write_buffer(
             &self.buffers.settings,
             0,
-            bytemuck::cast_slice(&[self.user.settings.to_raw()]),
+            bytemuck::cast_slice(&[self.user.settings]),
         );
 
         if self.update.reset {

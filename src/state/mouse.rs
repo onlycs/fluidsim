@@ -2,6 +2,8 @@ use bytemuck::{Pod, Zeroable};
 
 use crate::prelude::*;
 
+pub type MouseState = crate::renderer::wgsl_compute::types::MouseState;
+
 #[derive(Clone, Copy, Debug, PartialEq, Pod, Zeroable)]
 #[repr(C)]
 pub struct RawMouseState {
@@ -10,18 +12,12 @@ pub struct RawMouseState {
     _pad: u32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Default)]
-#[repr(C)]
-pub struct MouseState {
-    pub px: Vec2,
-    pub clickmask: u32,
-}
-
 impl MouseState {
     pub fn new(px: Vec2, left: bool, right: bool) -> Self {
         Self {
-            px,
+            position: px,
             clickmask: (left as u32) | ((right as u32) << 1),
+            ..Self::zeroed()
         }
     }
 
@@ -50,15 +46,21 @@ impl MouseState {
     }
 
     pub fn update(&mut self, px: Option<Vec2>, left: bool, right: bool) {
-        self.px = px.unwrap_or(self.px);
+        self.position = px.unwrap_or(self.position);
         self.clickmask = (left as u32) | ((right as u32) << 1);
     }
 
     pub fn to_raw(&self) -> RawMouseState {
         RawMouseState {
-            position: [self.px.x, self.px.y],
+            position: [self.position.x, self.position.y],
             clickmask: self.clickmask,
             _pad: 0,
         }
+    }
+}
+
+impl Default for MouseState {
+    fn default() -> Self {
+        Self { ..Self::zeroed() }
     }
 }

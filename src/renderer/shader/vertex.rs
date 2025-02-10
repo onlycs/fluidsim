@@ -1,4 +1,7 @@
-use std::ops::{Deref, DerefMut};
+use std::{
+    borrow::Cow,
+    ops::{Deref, DerefMut},
+};
 
 use crate::prelude::*;
 use bytemuck::{Pod, Zeroable};
@@ -9,50 +12,33 @@ use lyon::{
         StrokeVertex, StrokeVertexConstructor, TessellationError, VertexBuffers,
     },
 };
+use renderer::WgpuData;
 use wgpu::{util::DeviceExt, BindGroupLayoutDescriptor};
 
-use super::*;
-use renderer::WgpuData;
+#[include_wgsl_oil::include_wgsl_oil(path = "assets/wgsl/circle.fs.wgsl")]
+pub mod wgsl_fragment {}
 
-#[repr(C)]
-#[derive(Copy, Clone, Debug, Pod, Zeroable)]
-pub struct CirclePrimitive {
-    pub color: [f32; 4],
-    pub translate: [f32; 2],
-    pub z_index: i32,
-    pub _pad: u32,
-}
+#[include_wgsl_oil::include_wgsl_oil(
+    path = "assets/wgsl/circle.vs.wgsl",
+    includes = ["assets/wgsl"]
+)]
+pub mod wgsl_vertex {}
 
-impl CirclePrimitive {
-    pub const fn default() -> Self {
-        Self {
-            color: [0.; 4],
-            translate: [0.; 2],
-            z_index: 0,
-            _pad: 0,
-        }
-    }
-}
+#[include_wgsl_oil::include_wgsl_oil(path = "assets/wgsl/common/prims.wgsl")]
+pub mod wgsl_prims {}
 
-impl Default for CirclePrimitive {
-    fn default() -> Self {
-        Self {
-            color: [0.; 4],
-            translate: [0.; 2],
-            z_index: 0,
-            _pad: 0,
-        }
-    }
-}
+pub const FS: wgpu::ShaderModuleDescriptor = wgpu::ShaderModuleDescriptor {
+    label: Some("circle$fragment"),
+    source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(wgsl_fragment::SOURCE)),
+};
 
-#[repr(C)]
-#[derive(Copy, Clone, Debug, Pod, Zeroable)]
-pub struct VsGlobals {
-    pub resolution: [f32; 2],
-    pub scroll: [f32; 2],
-    pub zoom: f32,
-    pub _pad: [f32; 3],
-}
+pub const VS: wgpu::ShaderModuleDescriptor = wgpu::ShaderModuleDescriptor {
+    label: Some("circle$vertex"),
+    source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(wgsl_vertex::SOURCE)),
+};
+
+pub type VsGlobals = wgsl_vertex::types::Globals;
+pub type VsCirclePrimitive = wgsl_prims::types::Primitive;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
@@ -170,7 +156,7 @@ impl VsState {
 
         let globals_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("vs::globals"),
-            size: std::mem::size_of::<VsGlobals>() as u64,
+            size: std::mem::size_of::<VsGlobals>() as u64 + 4,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -285,10 +271,10 @@ impl VsState {
 
         self.0 = Some(VsData {
             globals: VsGlobals {
-                resolution: [0., 0.],
-                scroll: [0., 0.],
+                resolution: Vec2::ZERO,
+                scroll: Vec2::ZERO,
                 zoom: 1.0,
-                _pad: [0.; _],
+                _pad: Vec2::ZERO,
             },
             globals_buf,
             index_buf,
