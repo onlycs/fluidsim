@@ -1,29 +1,16 @@
 use bytemuck::Zeroable;
+use gpu_shared::WORKGROUP_SIZE;
 
 use crate::prelude::*;
 use crate::renderer::WgpuData;
 use core::f32;
-use std::borrow::Cow;
 use std::mem;
 use std::ops::{Deref, DerefMut};
 
 use super::vertex::VsCirclePrimitive;
 use super::*;
 
-pub const WORKGROUP_SIZE: u32 = 64;
-
 pub struct PhysicsData;
-
-#[include_wgsl_oil::include_wgsl_oil(
-    path = "assets/wgsl/physics.comp.wgsl",
-    includes = ["assets/wgsl"]
-)]
-pub mod wgsl_compute {}
-
-pub const CS: wgpu::ShaderModuleDescriptor = wgpu::ShaderModuleDescriptor {
-    label: Some("circle$compute"),
-    source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(wgsl_compute::SOURCE)),
-};
 
 impl PhysicsData {
     pub fn bind_group_layout(
@@ -199,13 +186,13 @@ impl UserData {
         [
             device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("physics::user_data::settings"),
-                size: mem::size_of::<SimSettings>() as u64 + 4,
+                size: mem::size_of::<SimSettings>() as u64,
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             }),
             device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("physics::user_data::mouse"),
-                size: mem::size_of::<RawMouseState>() as u64,
+                size: mem::size_of::<MouseState>() as u64,
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             }),
@@ -423,7 +410,7 @@ impl ComputeData {
         let empty_f32s = vec![0f32; ARRAY_LEN];
 
         queue.write_buffer(&settings, 0, bytemuck::cast_slice(&[usr.settings]));
-        queue.write_buffer(&mouse, 0, bytemuck::cast_slice(&[usr.mouse.to_raw()]));
+        queue.write_buffer(&mouse, 0, bytemuck::cast_slice(&[usr.mouse]));
         queue.write_buffer(&positions, 0, bytemuck::cast_slice(&empty_vec2s));
         queue.write_buffer(&predictions, 0, bytemuck::cast_slice(&empty_vec2s));
         queue.write_buffer(&velocities, 0, bytemuck::cast_slice(&empty_vec2s));
@@ -458,7 +445,7 @@ impl ComputeData {
             spatial: spatial_bg,
         };
 
-        let shader = device.create_shader_module(CS);
+        let shader = device.create_shader_module(super::SHADER.clone());
 
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("physics$layout"),
@@ -489,10 +476,10 @@ impl ComputeData {
                 cache: None,
             },
             wgpu::ComputePipelineDescriptor {
-                label: Some("physics::copy_to_prims$pipeline"),
+                label: Some("physics::copy_prims$pipeline"),
                 layout: Some(&layout),
                 module: &shader,
-                entry_point: Some("copy_to_prims"),
+                entry_point: Some("copy_prims"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 cache: None,
             },
@@ -505,16 +492,14 @@ impl ComputeData {
 
         let pipelines = pipeline_desc.map(|desc| device.create_compute_pipeline(&desc));
 
-        let this = Self {
+        Self {
             user: usr,
             buffers,
             bind_groups,
             update: Default::default(),
             pipelines,
             pass_desc: pass,
-        };
-
-        this
+        }
     }
 
     pub fn prims_buf(&self) -> Arc<wgpu::Buffer> {
@@ -575,7 +560,7 @@ impl ComputeData {
         );
 
         if self.update.reset {
-            let new_pos = self.reset(&conditions);
+            let new_pos = self.reset(conditions);
             let empty_vec2s = vec![[0f32; 2]; ARRAY_LEN];
             let empty_f32s = vec![0f32; ARRAY_LEN];
 
@@ -589,12 +574,12 @@ impl ComputeData {
                 ..
             } = &self.buffers;
 
-            queue.write_buffer(&positions, 0, bytemuck::cast_slice(&new_pos));
-            queue.write_buffer(&predictions, 0, bytemuck::cast_slice(&empty_vec2s));
-            queue.write_buffer(&velocities, 0, bytemuck::cast_slice(&empty_vec2s));
-            queue.write_buffer(&densities, 0, bytemuck::cast_slice(&empty_f32s));
-            queue.write_buffer(&lookup, 0, bytemuck::cast_slice(&vec![u32::MAX; ARRAY_LEN]));
-            queue.write_buffer(&starts, 0, bytemuck::cast_slice(&vec![u32::MAX; ARRAY_LEN]));
+            queue.write_buffer(positions, 0, bytemuck::cast_slice(&new_pos));
+            queue.write_buffer(predictions, 0, bytemuck::cast_slice(&empty_vec2s));
+            queue.write_buffer(velocities, 0, bytemuck::cast_slice(&empty_vec2s));
+            queue.write_buffer(densities, 0, bytemuck::cast_slice(&empty_f32s));
+            queue.write_buffer(lookup, 0, bytemuck::cast_slice(&vec![u32::MAX; ARRAY_LEN]));
+            queue.write_buffer(starts, 0, bytemuck::cast_slice(&vec![u32::MAX; ARRAY_LEN]));
 
             // run only the last pipeline on a reset
             let mut pass = encoder.begin_compute_pass(&self.pass_desc);
@@ -605,7 +590,7 @@ impl ComputeData {
             pass.set_bind_group(2, &self.bind_groups.rendering, &[]);
             pass.set_bind_group(3, &self.bind_groups.spatial, &[]);
             pass.dispatch_workgroups(
-                (self.user.settings.num_particles + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE,
+                self.user.settings.num_particles.div_ceil(WORKGROUP_SIZE),
                 1,
                 1,
             );
@@ -618,7 +603,7 @@ impl ComputeData {
             queue.write_buffer(
                 &self.buffers.mouse,
                 0,
-                bytemuck::cast_slice(&[self.user.mouse.to_raw()]),
+                bytemuck::cast_slice(&[self.user.mouse]),
             );
 
             self.update.mouse = false;
@@ -627,13 +612,13 @@ impl ComputeData {
         for pipeline in &self.pipelines {
             let mut pass = encoder.begin_compute_pass(&self.pass_desc);
 
-            pass.set_pipeline(&pipeline);
+            pass.set_pipeline(pipeline);
             pass.set_bind_group(0, &self.bind_groups.user, &[]);
             pass.set_bind_group(1, &self.bind_groups.physics, &[]);
             pass.set_bind_group(2, &self.bind_groups.rendering, &[]);
             pass.set_bind_group(3, &self.bind_groups.spatial, &[]);
             pass.dispatch_workgroups(
-                (self.user.settings.num_particles + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE,
+                self.user.settings.num_particles.div_ceil(WORKGROUP_SIZE),
                 1,
                 1,
             );

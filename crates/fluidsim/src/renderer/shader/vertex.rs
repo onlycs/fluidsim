@@ -1,7 +1,4 @@
-use std::{
-    borrow::Cow,
-    ops::{Deref, DerefMut},
-};
+use std::ops::{Deref, DerefMut};
 
 use crate::prelude::*;
 use bytemuck::{Pod, Zeroable};
@@ -15,30 +12,8 @@ use lyon::{
 use renderer::WgpuData;
 use wgpu::{util::DeviceExt, BindGroupLayoutDescriptor};
 
-#[include_wgsl_oil::include_wgsl_oil(path = "assets/wgsl/circle.fs.wgsl")]
-pub mod wgsl_fragment {}
-
-#[include_wgsl_oil::include_wgsl_oil(
-    path = "assets/wgsl/circle.vs.wgsl",
-    includes = ["assets/wgsl"]
-)]
-pub mod wgsl_vertex {}
-
-#[include_wgsl_oil::include_wgsl_oil(path = "assets/wgsl/common/prims.wgsl")]
-pub mod wgsl_prims {}
-
-pub const FS: wgpu::ShaderModuleDescriptor = wgpu::ShaderModuleDescriptor {
-    label: Some("circle$fragment"),
-    source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(wgsl_fragment::SOURCE)),
-};
-
-pub const VS: wgpu::ShaderModuleDescriptor = wgpu::ShaderModuleDescriptor {
-    label: Some("circle$vertex"),
-    source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(wgsl_vertex::SOURCE)),
-};
-
-pub type VsGlobals = wgsl_vertex::types::Globals;
-pub type VsCirclePrimitive = wgsl_prims::types::Primitive;
+pub type VsGlobals = gpu_shared::Globals;
+pub type VsCirclePrimitive = gpu_shared::Primitive;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
@@ -156,7 +131,7 @@ impl VsState {
 
         let globals_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("vs::globals"),
-            size: std::mem::size_of::<VsGlobals>() as u64 + 4,
+            size: std::mem::size_of::<VsGlobals>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -173,8 +148,8 @@ impl VsState {
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-        let fs = device.create_shader_module(FS);
-        let vs = device.create_shader_module(VS);
+        let fs = device.create_shader_module(super::SHADER.clone());
+        let vs = device.create_shader_module(super::SHADER.clone());
 
         let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
             label: Some("vs$layout"),
@@ -234,7 +209,7 @@ impl VsState {
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &vs,
-                entry_point: Some("main"),
+                entry_point: Some("vs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: std::mem::size_of::<VsInput>() as u64,
@@ -244,7 +219,7 @@ impl VsState {
             },
             fragment: Some(wgpu::FragmentState {
                 module: &fs,
-                entry_point: Some("main"),
+                entry_point: Some("fs_main"),
                 targets: &fs_targets,
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             }),
@@ -274,7 +249,7 @@ impl VsState {
                 resolution: Vec2::ZERO,
                 scroll: Vec2::ZERO,
                 zoom: 1.0,
-                _pad: Vec2::ZERO,
+                ..VsGlobals::default()
             },
             globals_buf,
             index_buf,

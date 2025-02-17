@@ -52,9 +52,13 @@ impl FpsCounter {
         );
 
         // wasm has no fonts according to cosmic, but include anyways cuz i like jbm
-        font_system
-            .db_mut()
-            .load_font_data(include_bytes!("../../font/JetBrainsMono-Light.ttf").to_vec());
+        font_system.db_mut().load_font_data(
+            include_bytes!(concat!(
+                env!("CARGO_WORKSPACE_DIR"),
+                "assets/font/JetBrainsMono-Light.ttf"
+            ))
+            .to_vec(),
+        );
 
         Ok(Self {
             font_system,

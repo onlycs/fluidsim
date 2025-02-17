@@ -71,7 +71,7 @@ impl InputHelper {
         }
     }
 
-    pub fn keydown<'a>(&'a self) -> impl Iterator<Item = KeyCode> + 'a {
+    pub fn keydown(&self) -> impl Iterator<Item = KeyCode> + '_ {
         self.keys.iter().copied()
     }
 }

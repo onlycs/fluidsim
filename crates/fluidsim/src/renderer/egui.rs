@@ -41,17 +41,17 @@ impl EguiTranslator {
     pub fn draw(
         &mut self,
         wgpu: &WgpuData,
-        mut encoder: &mut CommandEncoder,
+        encoder: &mut CommandEncoder,
         surface_view: &TextureView,
         ui: impl FnMut(&Context),
     ) {
         self.context.set_pixels_per_point(1.0);
 
-        let input = self.state.take_egui_input(&*wgpu.window);
+        let input = self.state.take_egui_input(&wgpu.window);
         let output = self.context.run(input, ui);
 
         self.state
-            .handle_platform_output(&*wgpu.window, output.platform_output);
+            .handle_platform_output(&wgpu.window, output.platform_output);
 
         let clips = self
             .context
@@ -68,7 +68,7 @@ impl EguiTranslator {
         };
 
         self.renderer
-            .update_buffers(&wgpu.device, &wgpu.queue, &mut encoder, &clips, &desc);
+            .update_buffers(&wgpu.device, &wgpu.queue, encoder, &clips, &desc);
 
         let rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("egui render pass"),

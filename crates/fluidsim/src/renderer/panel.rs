@@ -42,7 +42,7 @@ impl Panel {
                 return;
             }
 
-            egui::Window::new("Simulation Settings").show(&ctx, |ui| {
+            egui::Window::new("Simulation Settings").show(ctx, |ui| {
                 ui.label(RichText::new("Graphics Settings").size(TEXT_SIZE).strong());
 
                 ui.add(Slider::new(&mut gfx.speed, 0.5..=2.0).text("Speed (multiplier)"))

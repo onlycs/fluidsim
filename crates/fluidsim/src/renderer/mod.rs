@@ -265,11 +265,7 @@ impl SimRenderer {
             ..
         } = &mut *self.fps;
 
-        buffer.set_size(
-            font_system,
-            Some(size.x as f32 * scale),
-            Some(size.y as f32 * scale),
-        );
+        buffer.set_size(font_system, Some(size.x * scale), Some(size.y * scale));
     }
 
     fn draw(&mut self) -> Result<(), DrawError> {
@@ -471,8 +467,3 @@ impl ApplicationHandler for SimRenderer {
         .unwrap();
     }
 }
-
-pub use shader::{
-    compute::wgsl_compute,
-    vertex::{wgsl_fragment, wgsl_prims, wgsl_vertex},
-};

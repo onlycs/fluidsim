@@ -1,0 +1,11 @@
+[package]
+name = "physics"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+gpu-shared.workspace = true
+spirv-std = { git = "https://github.com/rust-gpu/rust-gpu" }
+
+[lib]
+crate-type = ["dylib"]

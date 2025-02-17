@@ -1,8 +1,5 @@
-pub(crate) use crate::{
-    error::*,
-    renderer,
-    state::{config::*, mouse::*},
-};
+pub(crate) use crate::{config::*, error::*, renderer};
+pub use gpu_shared::{MouseState, Settings as SimSettings};
 
 pub use std::sync::Arc;
 
