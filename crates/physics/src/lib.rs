@@ -1,5 +1,5 @@
 #![no_std]
-#![allow(unexpected_cfgs, clippy::too_many_arguments)]
+#![allow(unexpected_cfgs, clippy::too_many_arguments, unused_imports)]
 
 use gpu_shared::{Globals, MouseState, Primitive, Settings, ARRAY_LEN, SCALE};
 use spirv_std::glam::{vec2, vec4, UVec3, Vec2, Vec4};
@@ -66,8 +66,8 @@ pub fn external_forces(
         let offset = mousepos - positions[id];
         let dist2 = offset.dot(offset);
 
-        if dist2 < <f32 as Real>::powi(settings.interaction_radius, 2) {
-            let dist = <f32 as Real>::sqrt(dist2);
+        if dist2 < settings.interaction_radius.powi(2) {
+            let dist = dist2.sqrt();
             let edge = dist / settings.interaction_radius;
             let center = 1. - edge;
             let dir = offset / dist;
