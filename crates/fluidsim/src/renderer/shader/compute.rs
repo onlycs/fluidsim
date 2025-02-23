@@ -3,7 +3,6 @@ use wgpu_sort::GPUSorter;
 
 use super::bindings::*;
 use crate::prelude::*;
-use crate::renderer::state::GameState;
 use crate::renderer::wgpu_state::WgpuData;
 
 #[derive(Default)]
@@ -33,7 +32,7 @@ pub struct ComputeData {
     pub bind_groups: BindGroups,
     pub update: UpdateState,
 
-    pub pipelines: [wgpu::ComputePipeline; 9],
+    pub pipelines: [wgpu::ComputePipeline; 10],
     pub pass_desc: wgpu::ComputePassDescriptor<'static>,
     pub sorter: GPUSorter,
 }
@@ -69,6 +68,7 @@ impl ComputeData {
         // initialize some nonzero buffers
         queue.write_buffer(lookup, 0, bytemuck::cast_slice(&vec![u32::MAX; ARRAY_LEN]));
         queue.write_buffer(&starts, 0, bytemuck::cast_slice(&vec![u32::MAX; ARRAY_LEN]));
+        queue.write_buffer(keys, 0, bytemuck::cast_slice(&vec![u32::MAX; ARRAY_LEN]));
 
         let buffers = Buffers {
             settings,
@@ -163,6 +163,15 @@ impl ComputeData {
                 layout: Some(&layout),
                 module: &shader,
                 entry_point: Some("pressure_force"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                cache: None,
+            },
+            // 6. viscosity forces
+            wgpu::ComputePipelineDescriptor {
+                label: Some("physics::viscosity$pipeline"),
+                layout: Some(&layout),
+                module: &shader,
+                entry_point: Some("viscosity"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 cache: None,
             },
@@ -286,12 +295,14 @@ impl ComputeData {
             } = &self.buffers;
 
             let lookup = sort_bufs.values();
+            let keys = sort_bufs.keys();
             queue.write_buffer(positions, 0, bytemuck::cast_slice(&new_pos));
             queue.write_buffer(predictions, 0, bytemuck::cast_slice(&empty_vec2s));
             queue.write_buffer(velocities, 0, bytemuck::cast_slice(&empty_vec2s));
             queue.write_buffer(densities, 0, bytemuck::cast_slice(&empty_f32s));
             queue.write_buffer(lookup, 0, bytemuck::cast_slice(&vec![u32::MAX; ARRAY_LEN]));
             queue.write_buffer(starts, 0, bytemuck::cast_slice(&vec![u32::MAX; ARRAY_LEN]));
+            queue.write_buffer(keys, 0, bytemuck::cast_slice(&vec![u32::MAX; ARRAY_LEN]));
 
             // run only the last pipeline on a reset
             let mut pass = encoder.begin_compute_pass(&self.pass_desc);
@@ -340,7 +351,6 @@ impl ComputeData {
                 // copy the sorted keys to the debug buffer
                 encoder.copy_buffer_to_buffer(
                     &self.buffers.starts,
-                    // &self.buffers.sort_bufs.keys(),
                     0,
                     &self.buffers.debug,
                     0,

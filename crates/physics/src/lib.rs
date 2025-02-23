@@ -5,10 +5,11 @@ use core::f32;
 
 use gpu_shared::{Globals, MouseState, Primitive, Settings, ARRAY_LEN, SCALE};
 use spirv_std::glam::{vec2, vec4, UVec3, Vec2, Vec4};
-use spirv_std::num_traits::real::Real;
+use spirv_std::num_traits::Float;
 use spirv_std::spirv;
 
 pub mod curves;
+pub mod gradient;
 pub mod sp_hash;
 
 #[inline(never)]
@@ -62,10 +63,7 @@ pub fn external_forces(
 ) {
     let id = id.x;
     let idx = id as usize;
-
-    if id > settings.num_particles {
-        return;
-    }
+    let mask = (id < settings.num_particles) as u32 as f32;
 
     let gravity = vec2(0.0, settings.gravity);
     let mut force = gravity;
@@ -92,7 +90,7 @@ pub fn external_forces(
         }
     }
 
-    velocities[idx] += force * settings.dtime;
+    velocities[idx] += force * settings.dtime * mask;
 }
 
 #[allow(unused_variables)]
@@ -115,12 +113,9 @@ pub fn update_predictions(
 
     let id = id.x;
     let idx = id as usize;
+    let mask = (id < settings.num_particles) as u32 as f32;
 
-    if id > settings.num_particles {
-        return;
-    }
-
-    predictions[idx] = positions[idx] + velocities[idx] * LOOKAHEAD;
+    predictions[idx] = positions[idx] + velocities[idx] * LOOKAHEAD * mask;
 }
 
 #[allow(unused_variables)]
@@ -142,11 +137,11 @@ pub fn pre_sort(
     let id = id.x;
     let idx = id as usize;
 
-    starts[idx] = u32::MAX;
-    if id > settings.num_particles {
+    if id >= settings.num_particles {
         return;
     }
 
+    starts[idx] = u32::MAX;
     lookup[idx] = id;
     keys[idx] = sp_hash::pos_to_key(
         predictions[idx],
@@ -174,7 +169,7 @@ pub fn post_sort(
     let id = id.x;
     let idx = id as usize;
 
-    if id > settings.num_particles {
+    if id >= settings.num_particles {
         return;
     }
 
@@ -201,10 +196,7 @@ pub fn update_densities(
 ) {
     let id = id.x;
     let idx = id as usize;
-
-    if id > settings.num_particles {
-        return;
-    }
+    let mask = (id < settings.num_particles) as u32 as f32;
 
     let cell = sp_hash::pos_to_cell(predictions[idx], settings.smoothing_radius);
     let mut density = 0.0;
@@ -223,7 +215,7 @@ pub fn update_densities(
         }
     }
 
-    densities[idx] = density;
+    densities[idx] = density * mask;
 }
 
 #[allow(unused_variables)]
@@ -244,10 +236,7 @@ pub fn pressure_force(
 ) {
     let id = id.x;
     let idx = id as usize;
-
-    if id > settings.num_particles {
-        return;
-    }
+    let mask = (id < settings.num_particles) as u32 as f32;
 
     let this_density = densities[idx];
     let this_position = predictions[idx];
@@ -294,7 +283,54 @@ pub fn pressure_force(
         }
     }
 
-    velocities[idx] += force / this_density * settings.dtime;
+    velocities[idx] += force / this_density * settings.dtime * mask;
+}
+
+#[allow(unused_variables)]
+#[spirv(compute(threads(64)))]
+pub fn viscosity(
+    #[spirv(uniform, descriptor_set = 0, binding = 0)] settings: &Settings,
+    #[spirv(uniform, descriptor_set = 0, binding = 1)] mouse: &MouseState,
+    #[spirv(storage_buffer, descriptor_set = 1, binding = 0)] positions: &mut [Vec2; ARRAY_LEN],
+    #[spirv(storage_buffer, descriptor_set = 1, binding = 1)] predictions: &mut [Vec2; ARRAY_LEN],
+    #[spirv(storage_buffer, descriptor_set = 1, binding = 2)] velocities: &mut [Vec2; ARRAY_LEN],
+    #[spirv(storage_buffer, descriptor_set = 1, binding = 3)] densities: &mut [f32; ARRAY_LEN],
+    #[spirv(storage_buffer, descriptor_set = 2, binding = 0)] prims: &mut [Primitive; ARRAY_LEN],
+    #[spirv(storage_buffer, descriptor_set = 3, binding = 0)] lookup: &mut [u32; ARRAY_LEN],
+    #[spirv(storage_buffer, descriptor_set = 3, binding = 1)] starts: &mut [u32; ARRAY_LEN],
+    #[spirv(storage_buffer, descriptor_set = 3, binding = 2)] keys: &mut [u32; ARRAY_LEN],
+
+    #[spirv(global_invocation_id)] id: UVec3,
+) {
+    let id = id.x;
+    let idx = id as usize;
+    let mask = (id < settings.num_particles) as u32 as f32;
+
+    let mut force = vec2(0.0, 0.0);
+    let position = predictions[idx];
+    let cell = sp_hash::pos_to_cell(predictions[idx], settings.smoothing_radius);
+
+    for neighbor_id in 0..9 {
+        let other = cell + sp_hash::NEIGHBORS[neighbor_id];
+        let key = sp_hash::cell_key(other, settings.num_particles);
+        let (begin, end) = sp_hash::get_by_key(key, starts, settings.num_particles);
+
+        for lookup_id in begin..end {
+            let other_id = lookup[lookup_id as usize];
+            let other_idx = other_id as usize;
+
+            if idx == other_idx {
+                continue;
+            }
+
+            let dist = position.distance(predictions[other_idx]);
+            let influence = curves::viscosity_smoothing(dist, settings.smoothing_radius);
+
+            force += (velocities[other_idx] - velocities[idx]) * influence;
+        }
+    }
+
+    velocities[idx] += force * settings.viscosity_strength * settings.dtime * mask;
 }
 
 #[allow(unused_variables)]
@@ -315,12 +351,9 @@ pub fn update_positions(
 ) {
     let id = id.x;
     let idx = id as usize;
+    let mask = (id < settings.num_particles) as u32 as f32;
 
-    if id > settings.num_particles {
-        return;
-    }
-
-    positions[idx] += velocities[idx] * settings.dtime;
+    positions[idx] += velocities[idx] * settings.dtime * mask;
 }
 
 #[allow(unused_variables)]
@@ -381,11 +414,15 @@ pub fn copy_prims(
 ) {
     let id = id.x;
     let idx = id as usize;
+    let mask = (id < settings.num_particles) as u32 as f32;
 
-    if id > settings.num_particles {
-        return;
-    }
+    // arbitrary max velocity, for color
+    const MAX_VEL: f32 = 15.0;
 
-    prims[idx].translate = positions[idx] * SCALE;
-    prims[idx].color = vec4((densities[idx] / 100.0).clamp(0., 1.), 0.0, 0.0, 1.0);
+    let speed = velocities[idx].length().clamp(0.0, MAX_VEL);
+    let t = speed / MAX_VEL;
+    let color = gradient::sample(gradient::VELOCITY, t);
+
+    prims[idx].translate = positions[idx] * SCALE * mask;
+    prims[idx].color = color * mask;
 }
