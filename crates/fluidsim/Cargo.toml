@@ -23,6 +23,7 @@ wgpu = { version = "24.0.1", default-features = false, features = [
     "metal",
     "webgpu",
 ] }
+wgpu_sort = { git = "https://github.com/onlycs/wgpu_sort", version = "0.1.0" }
 winit = "0.30.8"
 
 [dependencies.egui-wgpu]

@@ -1,18 +1,24 @@
 use bytemuck::Zeroable;
 use gpu_shared::WORKGROUP_SIZE;
+use wgpu::BufferUsages;
+use wgpu_sort::{GPUSorter, SortBuffers};
 
 use crate::prelude::*;
 use crate::renderer::WgpuData;
 use core::f32;
 use std::mem;
+use std::num::NonZeroU32;
 use std::ops::{Deref, DerefMut};
 
 use super::vertex::VsCirclePrimitive;
 use super::*;
 
-pub struct PhysicsData;
+const STORAGE_BUFFER: wgpu::BufferUsages = BufferUsages::STORAGE
+    .union(BufferUsages::COPY_SRC)
+    .union(BufferUsages::COPY_DST);
 
-impl PhysicsData {
+pub struct Physics;
+impl Physics {
     pub fn bind_group_layout(
         device: &wgpu::Device,
         buffers: &[wgpu::Buffer; 4],
@@ -98,25 +104,25 @@ impl PhysicsData {
             device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("physics::simulation_data::positions"),
                 size: (mem::size_of::<[f32; 2]>() * ARRAY_LEN) as u64,
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                usage: STORAGE_BUFFER,
                 mapped_at_creation: false,
             }),
             device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("physics::simulation_data::positions"),
+                label: Some("physics::simulation_data::predictions"),
                 size: (mem::size_of::<[f32; 2]>() * ARRAY_LEN) as u64,
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                usage: STORAGE_BUFFER,
                 mapped_at_creation: false,
             }),
             device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("physics::simulation_data::positions"),
+                label: Some("physics::simulation_data::velocities"),
                 size: (mem::size_of::<[f32; 2]>() * ARRAY_LEN) as u64,
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                usage: STORAGE_BUFFER,
                 mapped_at_creation: false,
             }),
             device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("physics::simulation_data::positions"),
+                label: Some("physics::simulation_data::densities"),
                 size: (mem::size_of::<f32>() * ARRAY_LEN) as u64,
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                usage: STORAGE_BUFFER,
                 mapped_at_creation: false,
             }),
         ]
@@ -200,9 +206,8 @@ impl UserData {
     }
 }
 
-pub struct SharedRenderingData;
-
-impl SharedRenderingData {
+pub struct Prims;
+impl Prims {
     pub fn bind_group_layout(
         device: &wgpu::Device,
         buffer: &wgpu::Buffer,
@@ -237,7 +242,7 @@ impl SharedRenderingData {
         })
     }
 
-    pub fn buffers(device: &wgpu::Device) -> wgpu::Buffer {
+    pub fn buf(device: &wgpu::Device) -> wgpu::Buffer {
         device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("physics::shared_data::prims"),
             size: (mem::size_of::<VsCirclePrimitive>() * ARRAY_LEN) as u64,
@@ -249,12 +254,11 @@ impl SharedRenderingData {
     }
 }
 
-pub struct SpatialHashData;
-
-impl SpatialHashData {
+pub struct SpatialHash;
+impl SpatialHash {
     pub fn bind_group_layout(
         device: &wgpu::Device,
-        buffers: &[wgpu::Buffer; 2],
+        buffers: [&wgpu::Buffer; 3],
     ) -> wgpu::BindGroupLayout {
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("physics::spatial_hash$layout"),
@@ -279,6 +283,16 @@ impl SpatialHashData {
                     },
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: false },
+                        has_dynamic_offset: false,
+                        min_binding_size: wgpu::BufferSize::new(buffers[2].size()),
+                    },
+                    count: None,
+                },
             ],
         })
     }
@@ -286,7 +300,7 @@ impl SpatialHashData {
     pub fn bind_group(
         device: &wgpu::Device,
         layout: &wgpu::BindGroupLayout,
-        buffers: &[wgpu::Buffer; 2],
+        buffers: [&wgpu::Buffer; 3],
     ) -> wgpu::BindGroup {
         device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout,
@@ -299,26 +313,24 @@ impl SpatialHashData {
                     binding: 1,
                     resource: wgpu::BindingResource::Buffer(buffers[1].as_entire_buffer_binding()),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Buffer(buffers[2].as_entire_buffer_binding()),
+                },
             ],
             label: Some("physics::spatial_hash$group"),
         })
     }
 
-    pub fn buffers(device: &wgpu::Device) -> [wgpu::Buffer; 2] {
-        [
-            device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("physics::spatial_hash::lookup"),
-                size: (mem::size_of::<u32>() * ARRAY_LEN) as u64,
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            }),
-            device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("physics::spatial_hash::starts"),
-                size: (mem::size_of::<u32>() * ARRAY_LEN) as u64,
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            }),
-        ]
+    pub fn starts_buf(device: &wgpu::Device) -> wgpu::Buffer {
+        device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("physics::spatial_hash::starts"),
+            size: (mem::size_of::<u32>() * ARRAY_LEN) as u64,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        })
     }
 }
 
@@ -337,8 +349,20 @@ pub struct Buffers {
     pub prims: Arc<wgpu::Buffer>,
 
     // group 3
-    pub lookup: wgpu::Buffer,
-    pub starts: wgpu::Buffer,
+    pub sort_bufs: SortBuffers, // lookup=0, keys=2
+    pub starts: wgpu::Buffer,   // starts=1
+
+    // debug
+    pub debug: wgpu::Buffer,
+}
+
+impl Buffers {
+    pub const DEBUG_DESC: wgpu::BufferDescriptor<'static> = wgpu::BufferDescriptor {
+        label: Some("physics::debug"),
+        size: 1024,
+        usage: BufferUsages::COPY_DST.union(BufferUsages::MAP_READ),
+        mapped_at_creation: false,
+    };
 }
 
 pub struct BindGroupLayouts {
@@ -376,33 +400,38 @@ pub struct ComputeData {
     pub bind_groups: BindGroups,
     pub update: UpdateState,
 
-    pub pipelines: [wgpu::ComputePipeline; 3],
+    pub pipelines: [wgpu::ComputePipeline; 8],
     pub pass_desc: wgpu::ComputePassDescriptor<'static>,
+    pub sorter: GPUSorter,
 }
 
 // creation and updating scene settings, etc
 impl ComputeData {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
         let usr = UserData::default();
+        let sorter = GPUSorter::new(device, 64);
+        let len = NonZeroU32::new(ARRAY_LEN as u32).unwrap();
+        let sort_bufs = sorter.create_sort_buffers(device, len);
 
         let user_buffers = UserData::buffers(device);
-        let physics_buffers = PhysicsData::buffers(device);
-        let shared = SharedRenderingData::buffers(device);
-        let spatial_buffers = SpatialHashData::buffers(device);
+        let physics_buffers = Physics::buffers(device);
+        let shared = Prims::buf(device);
+        let starts = SpatialHash::starts_buf(device);
+        let lookup = sort_bufs.values();
+        let keys = sort_bufs.keys();
 
         let user_bgl = UserData::bind_group_layout(device, &user_buffers);
-        let physics_bgl = PhysicsData::bind_group_layout(device, &physics_buffers);
-        let rendering_bgl = SharedRenderingData::bind_group_layout(device, &shared);
-        let spatial_bgl = SpatialHashData::bind_group_layout(device, &spatial_buffers);
+        let physics_bgl = Physics::bind_group_layout(device, &physics_buffers);
+        let rendering_bgl = Prims::bind_group_layout(device, &shared);
+        let spatial_bgl = SpatialHash::bind_group_layout(device, [lookup, &starts, keys]);
 
         let user_bg = UserData::bind_group(device, &user_bgl, &user_buffers);
-        let physics_bg = PhysicsData::bind_group(device, &physics_bgl, &physics_buffers);
-        let rendering_bg = SharedRenderingData::bind_group(device, &rendering_bgl, &shared);
-        let spatial_bg = SpatialHashData::bind_group(device, &spatial_bgl, &spatial_buffers);
+        let physics_bg = Physics::bind_group(device, &physics_bgl, &physics_buffers);
+        let rendering_bg = Prims::bind_group(device, &rendering_bgl, &shared);
+        let spatial_bg = SpatialHash::bind_group(device, &spatial_bgl, [lookup, &starts, keys]);
 
         let [settings, mouse] = user_buffers;
         let [positions, predictions, velocities, densities] = physics_buffers;
-        let [lookup, starts] = spatial_buffers;
 
         // initialize the buffers
         let empty_prims = vec![VsCirclePrimitive::zeroed(); ARRAY_LEN];
@@ -416,7 +445,7 @@ impl ComputeData {
         queue.write_buffer(&velocities, 0, bytemuck::cast_slice(&empty_vec2s));
         queue.write_buffer(&densities, 0, bytemuck::cast_slice(&empty_f32s));
         queue.write_buffer(&shared, 0, bytemuck::cast_slice(&empty_prims));
-        queue.write_buffer(&lookup, 0, bytemuck::cast_slice(&vec![u32::MAX; ARRAY_LEN]));
+        queue.write_buffer(lookup, 0, bytemuck::cast_slice(&vec![u32::MAX; ARRAY_LEN]));
         queue.write_buffer(&starts, 0, bytemuck::cast_slice(&vec![u32::MAX; ARRAY_LEN]));
 
         let buffers = Buffers {
@@ -427,8 +456,9 @@ impl ComputeData {
             velocities,
             densities,
             prims: Arc::new(shared),
-            lookup,
             starts,
+            sort_bufs,
+            debug: device.create_buffer(&Buffers::DEBUG_DESC),
         };
 
         let bind_layouts: BindGroupLayouts = BindGroupLayouts {
@@ -459,6 +489,7 @@ impl ComputeData {
         });
 
         let pipeline_desc = [
+            // 1. external forces
             wgpu::ComputePipelineDescriptor {
                 label: Some("physics::external_forces$pipeline"),
                 layout: Some(&layout),
@@ -467,6 +498,44 @@ impl ComputeData {
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 cache: None,
             },
+            // 2. update predictions
+            wgpu::ComputePipelineDescriptor {
+                label: Some("physics::update_predictions$pipeline"),
+                layout: Some(&layout),
+                module: &shader,
+                entry_point: Some("update_predictions"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                cache: None,
+            },
+            // 3a. pre-sort
+            wgpu::ComputePipelineDescriptor {
+                label: Some("physics::pre_sort$pipeline"),
+                layout: Some(&layout),
+                module: &shader,
+                entry_point: Some("pre_sort"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                cache: None,
+            },
+            // 3b. sort (not a pipeline)
+            // 3c. post-sort
+            wgpu::ComputePipelineDescriptor {
+                label: Some("physics::post_sort$pipeline"),
+                layout: Some(&layout),
+                module: &shader,
+                entry_point: Some("post_sort"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                cache: None,
+            },
+            // 4. update densities
+            wgpu::ComputePipelineDescriptor {
+                label: Some("physics::update_densities$pipeline"),
+                layout: Some(&layout),
+                module: &shader,
+                entry_point: Some("update_densities"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                cache: None,
+            },
+            // end: update positions
             wgpu::ComputePipelineDescriptor {
                 label: Some("physics::update_positions$pipeline"),
                 layout: Some(&layout),
@@ -475,6 +544,16 @@ impl ComputeData {
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 cache: None,
             },
+            // end: collision resolution
+            wgpu::ComputePipelineDescriptor {
+                label: Some("physics::collide$pipeline"),
+                layout: Some(&layout),
+                module: &shader,
+                entry_point: Some("collide"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                cache: None,
+            },
+            // end: copy prims
             wgpu::ComputePipelineDescriptor {
                 label: Some("physics::copy_prims$pipeline"),
                 layout: Some(&layout),
@@ -499,6 +578,7 @@ impl ComputeData {
             update: Default::default(),
             pipelines,
             pass_desc: pass,
+            sorter,
         }
     }
 
@@ -552,6 +632,7 @@ impl ComputeData {
         encoder: &mut wgpu::CommandEncoder,
         dtime: f32,
     ) {
+        let num_workgroups = self.user.settings.num_particles.div_ceil(WORKGROUP_SIZE);
         self.user.settings.dtime = dtime;
         queue.write_buffer(
             &self.buffers.settings,
@@ -569,11 +650,12 @@ impl ComputeData {
                 predictions,
                 velocities,
                 densities,
-                lookup,
+                sort_bufs,
                 starts,
                 ..
             } = &self.buffers;
 
+            let lookup = sort_bufs.values();
             queue.write_buffer(positions, 0, bytemuck::cast_slice(&new_pos));
             queue.write_buffer(predictions, 0, bytemuck::cast_slice(&empty_vec2s));
             queue.write_buffer(velocities, 0, bytemuck::cast_slice(&empty_vec2s));
@@ -583,17 +665,12 @@ impl ComputeData {
 
             // run only the last pipeline on a reset
             let mut pass = encoder.begin_compute_pass(&self.pass_desc);
-
             pass.set_pipeline(&self.pipelines[self.pipelines.len() - 1]);
             pass.set_bind_group(0, &self.bind_groups.user, &[]);
             pass.set_bind_group(1, &self.bind_groups.physics, &[]);
             pass.set_bind_group(2, &self.bind_groups.rendering, &[]);
             pass.set_bind_group(3, &self.bind_groups.spatial, &[]);
-            pass.dispatch_workgroups(
-                self.user.settings.num_particles.div_ceil(WORKGROUP_SIZE),
-                1,
-                1,
-            );
+            pass.dispatch_workgroups(num_workgroups, 1, 1);
 
             self.update.reset = false;
             return;
@@ -609,21 +686,37 @@ impl ComputeData {
             self.update.mouse = false;
         }
 
-        for pipeline in &self.pipelines {
+        for (i, pipeline) in self.pipelines.iter().enumerate() {
             let mut pass = encoder.begin_compute_pass(&self.pass_desc);
-
             pass.set_pipeline(pipeline);
             pass.set_bind_group(0, &self.bind_groups.user, &[]);
             pass.set_bind_group(1, &self.bind_groups.physics, &[]);
             pass.set_bind_group(2, &self.bind_groups.rendering, &[]);
             pass.set_bind_group(3, &self.bind_groups.spatial, &[]);
-            pass.dispatch_workgroups(
-                self.user.settings.num_particles.div_ceil(WORKGROUP_SIZE),
-                1,
-                1,
-            );
+            pass.dispatch_workgroups(num_workgroups, 1, 1);
 
             drop(pass);
+
+            if i == 2 {
+                self.sorter.sort(
+                    encoder,
+                    queue,
+                    &self.buffers.sort_bufs,
+                    Some(self.user.settings.num_particles),
+                );
+            }
+
+            if i == 3 {
+                // copy the sorted keys to the debug buffer
+                encoder.copy_buffer_to_buffer(
+                    &self.buffers.starts,
+                    // &self.buffers.sort_bufs.keys(),
+                    0,
+                    &self.buffers.debug,
+                    0,
+                    1024,
+                );
+            }
         }
     }
 }

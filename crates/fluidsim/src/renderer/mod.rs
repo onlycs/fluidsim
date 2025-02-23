@@ -370,7 +370,18 @@ impl SimRenderer {
         }
 
         self.wgpu.queue.submit(Some(encoder.finish()));
+
+        let buffer_slice = self.compute.buffers.debug.slice(..);
+        buffer_slice.map_async(wgpu::MapMode::Read, |_| {});
         self.wgpu.device.poll(wgpu::Maintain::Wait);
+
+        let mapped_range = buffer_slice.get_mapped_range();
+        let result: &[u32] = bytemuck::cast_slice(&mapped_range);
+        debug!("{:?}", &result);
+        drop(mapped_range);
+
+        self.compute.buffers.debug.unmap();
+
         surface_tex.present();
 
         Ok(())
