@@ -1,382 +1,15 @@
-use bytemuck::Zeroable;
-use gpu_shared::WORKGROUP_SIZE;
-use wgpu::BufferUsages;
-use wgpu_sort::{GPUSorter, SortBuffers};
-
-use crate::prelude::*;
-use crate::renderer::WgpuData;
-use core::f32;
-use std::mem;
-use std::num::NonZeroU32;
 use std::ops::{Deref, DerefMut};
+use wgpu_sort::GPUSorter;
 
-use super::vertex::VsCirclePrimitive;
-use super::*;
-
-const STORAGE_BUFFER: wgpu::BufferUsages = BufferUsages::STORAGE
-    .union(BufferUsages::COPY_SRC)
-    .union(BufferUsages::COPY_DST);
-
-pub struct Physics;
-impl Physics {
-    pub fn bind_group_layout(
-        device: &wgpu::Device,
-        buffers: &[wgpu::Buffer; 4],
-    ) -> wgpu::BindGroupLayout {
-        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("physics::simulation_data$layout"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: wgpu::BufferSize::new(buffers[0].size()),
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: wgpu::BufferSize::new(buffers[1].size()),
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: wgpu::BufferSize::new(buffers[2].size()),
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 3,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: wgpu::BufferSize::new(buffers[3].size()),
-                    },
-                    count: None,
-                },
-            ],
-        })
-    }
-
-    pub fn bind_group(
-        device: &wgpu::Device,
-        layout: &wgpu::BindGroupLayout,
-        buffers: &[wgpu::Buffer; 4],
-    ) -> wgpu::BindGroup {
-        device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Buffer(buffers[0].as_entire_buffer_binding()),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Buffer(buffers[1].as_entire_buffer_binding()),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::Buffer(buffers[2].as_entire_buffer_binding()),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: wgpu::BindingResource::Buffer(buffers[3].as_entire_buffer_binding()),
-                },
-            ],
-            label: Some("physics::simulation_data$group"),
-        })
-    }
-
-    pub fn buffers(device: &wgpu::Device) -> [wgpu::Buffer; 4] {
-        [
-            device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("physics::simulation_data::positions"),
-                size: (mem::size_of::<[f32; 2]>() * ARRAY_LEN) as u64,
-                usage: STORAGE_BUFFER,
-                mapped_at_creation: false,
-            }),
-            device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("physics::simulation_data::predictions"),
-                size: (mem::size_of::<[f32; 2]>() * ARRAY_LEN) as u64,
-                usage: STORAGE_BUFFER,
-                mapped_at_creation: false,
-            }),
-            device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("physics::simulation_data::velocities"),
-                size: (mem::size_of::<[f32; 2]>() * ARRAY_LEN) as u64,
-                usage: STORAGE_BUFFER,
-                mapped_at_creation: false,
-            }),
-            device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("physics::simulation_data::densities"),
-                size: (mem::size_of::<f32>() * ARRAY_LEN) as u64,
-                usage: STORAGE_BUFFER,
-                mapped_at_creation: false,
-            }),
-        ]
-    }
-}
+use super::bindings::*;
+use crate::prelude::*;
+use crate::renderer::state::GameState;
+use crate::renderer::wgpu_state::WgpuData;
 
 #[derive(Default)]
 pub struct UserData {
     pub settings: SimSettings,
     pub mouse: MouseState,
-}
-
-impl UserData {
-    pub fn bind_group_layout(
-        device: &wgpu::Device,
-        buffer: &[wgpu::Buffer; 2],
-    ) -> wgpu::BindGroupLayout {
-        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("physics::user_data$layout"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: wgpu::BufferSize::new(buffer[0].size()),
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: wgpu::BufferSize::new(buffer[1].size()),
-                    },
-                    count: None,
-                },
-            ],
-        })
-    }
-
-    pub fn bind_group(
-        device: &wgpu::Device,
-        layout: &wgpu::BindGroupLayout,
-        buffers: &[wgpu::Buffer; 2],
-    ) -> wgpu::BindGroup {
-        device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Buffer(buffers[0].as_entire_buffer_binding()),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Buffer(buffers[1].as_entire_buffer_binding()),
-                },
-            ],
-            label: Some("physics::user_data$group"),
-        })
-    }
-
-    pub fn buffers(device: &wgpu::Device) -> [wgpu::Buffer; 2] {
-        [
-            device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("physics::user_data::settings"),
-                size: mem::size_of::<SimSettings>() as u64,
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            }),
-            device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("physics::user_data::mouse"),
-                size: mem::size_of::<MouseState>() as u64,
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            }),
-        ]
-    }
-}
-
-pub struct Prims;
-impl Prims {
-    pub fn bind_group_layout(
-        device: &wgpu::Device,
-        buffer: &wgpu::Buffer,
-    ) -> wgpu::BindGroupLayout {
-        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("physics::shared_data$layout"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: false },
-                    has_dynamic_offset: false,
-                    min_binding_size: wgpu::BufferSize::new(buffer.size()),
-                },
-                count: None,
-            }],
-        })
-    }
-
-    pub fn bind_group(
-        device: &wgpu::Device,
-        layout: &wgpu::BindGroupLayout,
-        buffer: &wgpu::Buffer,
-    ) -> wgpu::BindGroup {
-        device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::Buffer(buffer.as_entire_buffer_binding()),
-            }],
-            label: Some("physics::shared_data$group"),
-        })
-    }
-
-    pub fn buf(device: &wgpu::Device) -> wgpu::Buffer {
-        device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("physics::shared_data::prims"),
-            size: (mem::size_of::<VsCirclePrimitive>() * ARRAY_LEN) as u64,
-            usage: wgpu::BufferUsages::STORAGE
-                | wgpu::BufferUsages::COPY_SRC
-                | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        })
-    }
-}
-
-pub struct SpatialHash;
-impl SpatialHash {
-    pub fn bind_group_layout(
-        device: &wgpu::Device,
-        buffers: [&wgpu::Buffer; 3],
-    ) -> wgpu::BindGroupLayout {
-        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("physics::spatial_hash$layout"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: wgpu::BufferSize::new(buffers[0].size()),
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: wgpu::BufferSize::new(buffers[1].size()),
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: wgpu::BufferSize::new(buffers[2].size()),
-                    },
-                    count: None,
-                },
-            ],
-        })
-    }
-
-    pub fn bind_group(
-        device: &wgpu::Device,
-        layout: &wgpu::BindGroupLayout,
-        buffers: [&wgpu::Buffer; 3],
-    ) -> wgpu::BindGroup {
-        device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Buffer(buffers[0].as_entire_buffer_binding()),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Buffer(buffers[1].as_entire_buffer_binding()),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::Buffer(buffers[2].as_entire_buffer_binding()),
-                },
-            ],
-            label: Some("physics::spatial_hash$group"),
-        })
-    }
-
-    pub fn starts_buf(device: &wgpu::Device) -> wgpu::Buffer {
-        device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("physics::spatial_hash::starts"),
-            size: (mem::size_of::<u32>() * ARRAY_LEN) as u64,
-            usage: wgpu::BufferUsages::STORAGE
-                | wgpu::BufferUsages::COPY_SRC
-                | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        })
-    }
-}
-
-pub struct Buffers {
-    // group 0
-    pub settings: wgpu::Buffer,
-    pub mouse: wgpu::Buffer,
-
-    // group 1
-    pub positions: wgpu::Buffer,
-    pub predictions: wgpu::Buffer,
-    pub velocities: wgpu::Buffer,
-    pub densities: wgpu::Buffer,
-
-    // group 2
-    pub prims: Arc<wgpu::Buffer>,
-
-    // group 3
-    pub sort_bufs: SortBuffers, // lookup=0, keys=2
-    pub starts: wgpu::Buffer,   // starts=1
-
-    // debug
-    pub debug: wgpu::Buffer,
-}
-
-impl Buffers {
-    pub const DEBUG_DESC: wgpu::BufferDescriptor<'static> = wgpu::BufferDescriptor {
-        label: Some("physics::debug"),
-        size: 1024,
-        usage: BufferUsages::COPY_DST.union(BufferUsages::MAP_READ),
-        mapped_at_creation: false,
-    };
-}
-
-pub struct BindGroupLayouts {
-    pub user: wgpu::BindGroupLayout,
-    pub physics: wgpu::BindGroupLayout,
-    pub rendering: wgpu::BindGroupLayout,
-    pub spatial: wgpu::BindGroupLayout,
-}
-
-pub struct BindGroups {
-    pub user: wgpu::BindGroup,
-    pub physics: wgpu::BindGroup,
-    pub rendering: wgpu::BindGroup,
-    pub spatial: wgpu::BindGroup,
 }
 
 pub struct UpdateState {
@@ -400,7 +33,7 @@ pub struct ComputeData {
     pub bind_groups: BindGroups,
     pub update: UpdateState,
 
-    pub pipelines: [wgpu::ComputePipeline; 8],
+    pub pipelines: [wgpu::ComputePipeline; 9],
     pub pass_desc: wgpu::ComputePassDescriptor<'static>,
     pub sorter: GPUSorter,
 }
@@ -413,38 +46,27 @@ impl ComputeData {
         let len = NonZeroU32::new(ARRAY_LEN as u32).unwrap();
         let sort_bufs = sorter.create_sort_buffers(device, len);
 
-        let user_buffers = UserData::buffers(device);
-        let physics_buffers = Physics::buffers(device);
-        let shared = Prims::buf(device);
-        let starts = SpatialHash::starts_buf(device);
+        let user_buffers = user_data::buffers(device);
+        let physics_buffers = physics::buffers(device);
+        let shared = prims::buf(device);
+        let starts = spatial_hash::starts_buf(device);
         let lookup = sort_bufs.values();
         let keys = sort_bufs.keys();
 
-        let user_bgl = UserData::bind_group_layout(device, &user_buffers);
-        let physics_bgl = Physics::bind_group_layout(device, &physics_buffers);
-        let rendering_bgl = Prims::bind_group_layout(device, &shared);
-        let spatial_bgl = SpatialHash::bind_group_layout(device, [lookup, &starts, keys]);
+        let user_bgl = user_data::bind_group_layout(device, &user_buffers);
+        let physics_bgl = physics::bind_group_layout(device, &physics_buffers);
+        let rendering_bgl = prims::bind_group_layout(device, &shared);
+        let spatial_bgl = spatial_hash::bind_group_layout(device, [lookup, &starts, keys]);
 
-        let user_bg = UserData::bind_group(device, &user_bgl, &user_buffers);
-        let physics_bg = Physics::bind_group(device, &physics_bgl, &physics_buffers);
-        let rendering_bg = Prims::bind_group(device, &rendering_bgl, &shared);
-        let spatial_bg = SpatialHash::bind_group(device, &spatial_bgl, [lookup, &starts, keys]);
+        let user_bg = user_data::bind_group(device, &user_bgl, &user_buffers);
+        let physics_bg = physics::bind_group(device, &physics_bgl, &physics_buffers);
+        let rendering_bg = prims::bind_group(device, &rendering_bgl, &shared);
+        let spatial_bg = spatial_hash::bind_group(device, &spatial_bgl, [lookup, &starts, keys]);
 
         let [settings, mouse] = user_buffers;
         let [positions, predictions, velocities, densities] = physics_buffers;
 
-        // initialize the buffers
-        let empty_prims = vec![VsCirclePrimitive::zeroed(); ARRAY_LEN];
-        let empty_vec2s = vec![[0f32; 2]; ARRAY_LEN];
-        let empty_f32s = vec![0f32; ARRAY_LEN];
-
-        queue.write_buffer(&settings, 0, bytemuck::cast_slice(&[usr.settings]));
-        queue.write_buffer(&mouse, 0, bytemuck::cast_slice(&[usr.mouse]));
-        queue.write_buffer(&positions, 0, bytemuck::cast_slice(&empty_vec2s));
-        queue.write_buffer(&predictions, 0, bytemuck::cast_slice(&empty_vec2s));
-        queue.write_buffer(&velocities, 0, bytemuck::cast_slice(&empty_vec2s));
-        queue.write_buffer(&densities, 0, bytemuck::cast_slice(&empty_f32s));
-        queue.write_buffer(&shared, 0, bytemuck::cast_slice(&empty_prims));
+        // initialize some nonzero buffers
         queue.write_buffer(lookup, 0, bytemuck::cast_slice(&vec![u32::MAX; ARRAY_LEN]));
         queue.write_buffer(&starts, 0, bytemuck::cast_slice(&vec![u32::MAX; ARRAY_LEN]));
 
@@ -532,6 +154,15 @@ impl ComputeData {
                 layout: Some(&layout),
                 module: &shader,
                 entry_point: Some("update_densities"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                cache: None,
+            },
+            // 5. pressure forces
+            wgpu::ComputePipelineDescriptor {
+                label: Some("physics::pressure_force$pipeline"),
+                layout: Some(&layout),
+                module: &shader,
+                entry_point: Some("pressure_force"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 cache: None,
             },
@@ -624,7 +255,6 @@ impl ComputeData {
         positions
     }
 
-    // TODO: compute
     pub fn update(
         &mut self,
         queue: &wgpu::Queue,

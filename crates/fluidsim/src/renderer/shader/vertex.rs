@@ -1,7 +1,7 @@
 use std::ops::{Deref, DerefMut};
 
 use crate::prelude::*;
-use bytemuck::{Pod, Zeroable};
+use crate::renderer::wgpu_state::WgpuData;
 use lyon::{
     geom::Point,
     tessellation::{
@@ -9,7 +9,6 @@ use lyon::{
         StrokeVertex, StrokeVertexConstructor, TessellationError, VertexBuffers,
     },
 };
-use renderer::WgpuData;
 use wgpu::{util::DeviceExt, BindGroupLayoutDescriptor};
 
 pub type VsGlobals = gpu_shared::Globals;

@@ -3,13 +3,14 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use super::WgpuData;
-use crate::prelude::*;
 use glyphon::{
     Attrs, Buffer, Cache, Color, FontSystem, Metrics, Resolution, SwashCache, TextArea, TextAtlas,
     TextBounds, TextRenderer, Viewport,
 };
 use wgpu::{CommandEncoder, MultisampleState, TextureView};
+
+use super::wgpu_state::WgpuData;
+use crate::prelude::*;
 
 const FONT_SIZE: f32 = 18.;
 const LINE_HEIGHT: f32 = 24.;

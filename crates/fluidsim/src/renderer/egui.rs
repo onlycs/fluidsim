@@ -1,12 +1,12 @@
 use std::ops::{Deref, DerefMut};
 
+use super::wgpu_state::WgpuData;
+
 use egui::{Context, Shadow};
 use egui_wgpu::{Renderer, ScreenDescriptor};
 use egui_winit::{EventResponse, State};
 use wgpu::{CommandEncoder, TextureView};
 use winit::{event::WindowEvent, window::Window};
-
-use super::WgpuData;
 
 pub struct EguiTranslator {
     context: Context,

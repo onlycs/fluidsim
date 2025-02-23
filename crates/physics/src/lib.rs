@@ -1,6 +1,8 @@
 #![no_std]
 #![allow(unexpected_cfgs, clippy::too_many_arguments, unused_imports)]
 
+use core::f32;
+
 use gpu_shared::{Globals, MouseState, Primitive, Settings, ARRAY_LEN, SCALE};
 use spirv_std::glam::{vec2, vec4, UVec3, Vec2, Vec4};
 use spirv_std::num_traits::real::Real;
@@ -176,13 +178,6 @@ pub fn post_sort(
         return;
     }
 
-    // truth table time so i can figure out which operation
-    // ID is zero  key isnt dup          do operation
-    //     t           -                      t
-    //     f           f                      f
-    //     f           t                      t
-    // therefore we need id is zero || key isnt dup
-
     if id == 0 || keys[idx] != keys[idx - 1] {
         starts[keys[idx] as usize] = id;
     }
@@ -229,6 +224,77 @@ pub fn update_densities(
     }
 
     densities[idx] = density;
+}
+
+#[allow(unused_variables)]
+#[spirv(compute(threads(64)))]
+pub fn pressure_force(
+    #[spirv(uniform, descriptor_set = 0, binding = 0)] settings: &Settings,
+    #[spirv(uniform, descriptor_set = 0, binding = 1)] mouse: &MouseState,
+    #[spirv(storage_buffer, descriptor_set = 1, binding = 0)] positions: &mut [Vec2; ARRAY_LEN],
+    #[spirv(storage_buffer, descriptor_set = 1, binding = 1)] predictions: &mut [Vec2; ARRAY_LEN],
+    #[spirv(storage_buffer, descriptor_set = 1, binding = 2)] velocities: &mut [Vec2; ARRAY_LEN],
+    #[spirv(storage_buffer, descriptor_set = 1, binding = 3)] densities: &mut [f32; ARRAY_LEN],
+    #[spirv(storage_buffer, descriptor_set = 2, binding = 0)] prims: &mut [Primitive; ARRAY_LEN],
+    #[spirv(storage_buffer, descriptor_set = 3, binding = 0)] lookup: &mut [u32; ARRAY_LEN],
+    #[spirv(storage_buffer, descriptor_set = 3, binding = 1)] starts: &mut [u32; ARRAY_LEN],
+    #[spirv(storage_buffer, descriptor_set = 3, binding = 2)] keys: &mut [u32; ARRAY_LEN],
+
+    #[spirv(global_invocation_id)] id: UVec3,
+) {
+    let id = id.x;
+    let idx = id as usize;
+
+    if id > settings.num_particles {
+        return;
+    }
+
+    let this_density = densities[idx];
+    let this_position = predictions[idx];
+    let this_pressure = curves::density_to_pressure(
+        this_density,
+        settings.target_density,
+        settings.pressure_multiplier,
+    );
+
+    let cell = sp_hash::pos_to_cell(predictions[idx], settings.smoothing_radius);
+    let mut force = vec2(0.0, 0.0);
+
+    for neighbor_id in 0..9 {
+        let other = cell + sp_hash::NEIGHBORS[neighbor_id];
+        let key = sp_hash::cell_key(other, settings.num_particles);
+        let (begin, end) = sp_hash::get_by_key(key, starts, settings.num_particles);
+
+        for lookup_id in begin..end {
+            let other_id = lookup[lookup_id as usize];
+            let other_idx = other_id as usize;
+
+            if idx == other_idx {
+                continue;
+            }
+
+            let offset = predictions[other_idx] - this_position;
+            let dist = offset.length();
+
+            let dir = if dist <= f32::EPSILON {
+                vec2(this_density.cos(), this_density.sin()).normalize()
+            } else {
+                offset / dist
+            };
+
+            let slope = curves::smoothing_deriv(dist, settings.smoothing_radius);
+            let pressure = curves::density_to_pressure(
+                densities[other_idx],
+                settings.target_density,
+                settings.pressure_multiplier,
+            );
+            let pressure_shared = (this_pressure + pressure) / 2.0; // newton's third law
+
+            force += pressure_shared * dir * slope * settings.mass / densities[other_idx];
+        }
+    }
+
+    velocities[idx] += force / this_density * settings.dtime;
 }
 
 #[allow(unused_variables)]
