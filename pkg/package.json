@@ -1,13 +1,7 @@
 {
-  "name": "fluidsim_exec",
+  "name": "fluidsim",
   "type": "module",
-  "description": "A fluid simulation",
   "version": "0.1.0",
-  "license": "AGPL-3.0",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/onlycs/fluidsim"
-  },
   "files": [
     "fluidsim_bg.wasm",
     "fluidsim.js",
