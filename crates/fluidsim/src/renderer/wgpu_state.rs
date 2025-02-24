@@ -59,6 +59,7 @@ impl WgpuState {
                     #[cfg(target_arch = "wasm32")]
                     required_limits: wgpu::Limits {
                         max_storage_buffer_binding_size: 134217728,
+                        max_compute_workgroup_storage_size: 17408,
                         ..wgpu::Limits::downlevel_defaults()
                     },
                     memory_hints: wgpu::MemoryHints::default(),
