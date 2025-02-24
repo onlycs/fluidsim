@@ -29,18 +29,6 @@ pub struct Buffers {
     // group 3
     pub sort_bufs: SortBuffers, // lookup=0, keys=2
     pub starts: wgpu::Buffer,   // starts=1
-
-    // debug
-    pub debug: wgpu::Buffer,
-}
-
-impl Buffers {
-    pub const DEBUG_DESC: wgpu::BufferDescriptor<'static> = wgpu::BufferDescriptor {
-        label: Some("physics::debug"),
-        size: 1024,
-        usage: BufferUsages::COPY_DST.union(BufferUsages::MAP_READ),
-        mapped_at_creation: false,
-    };
 }
 
 pub struct BindGroupLayouts {

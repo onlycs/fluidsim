@@ -139,10 +139,12 @@ impl SimRenderer {
             label: Some("circle command encoder"),
         });
 
-        let dtime = self.game.dtime();
-        let init = &self.game.init;
-        for _ in 0..self.game.gfx.steps_per_frame {
-            self.compute.update(queue, init, &mut encoder, dtime);
+        let framesteps = self.game.gfx.steps_per_frame;
+        let dtime = self.game.dtime().min(1. / 60.) / framesteps as f32;
+        let conditions = &self.game.init;
+
+        for _ in 0..framesteps {
+            self.compute.update(queue, conditions, &mut encoder, dtime);
         }
 
         self.shader.update(&self.wgpu, self.compute.user.settings)?;
@@ -183,9 +185,7 @@ impl SimRenderer {
         }
 
         // draw fps counter
-        {
-            self.fps.render(&self.wgpu, &mut encoder, &surface_view)?;
-        }
+        self.fps.render(&self.wgpu, &mut encoder, &surface_view)?;
 
         // draw egui
         {
@@ -214,18 +214,6 @@ impl SimRenderer {
         }
 
         queue.submit(Some(encoder.finish()));
-
-        let buffer_slice = self.compute.buffers.debug.slice(..);
-        buffer_slice.map_async(wgpu::MapMode::Read, |_| {});
-        self.wgpu.device.poll(wgpu::Maintain::Wait);
-
-        let mapped_range = buffer_slice.get_mapped_range();
-        let result: &[u32] = bytemuck::cast_slice(&mapped_range);
-        debug!("{:?}", &result);
-        drop(mapped_range);
-
-        self.compute.buffers.debug.unmap();
-
         surface_tex.present();
 
         Ok(())

@@ -80,7 +80,6 @@ impl ComputeData {
             prims: Arc::new(shared),
             starts,
             sort_bufs,
-            debug: device.create_buffer(&Buffers::DEBUG_DESC),
         };
 
         let bind_layouts: BindGroupLayouts = BindGroupLayouts {
@@ -344,17 +343,6 @@ impl ComputeData {
                     queue,
                     &self.buffers.sort_bufs,
                     Some(self.user.settings.num_particles),
-                );
-            }
-
-            if i == 3 {
-                // copy the sorted keys to the debug buffer
-                encoder.copy_buffer_to_buffer(
-                    &self.buffers.starts,
-                    0,
-                    &self.buffers.debug,
-                    0,
-                    1024,
                 );
             }
         }

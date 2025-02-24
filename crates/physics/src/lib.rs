@@ -257,19 +257,12 @@ pub fn pressure_force(
         for lookup_id in begin..end {
             let other_id = lookup[lookup_id as usize];
             let other_idx = other_id as usize;
-
-            if idx == other_idx {
-                continue;
-            }
+            let mask = (idx != other_idx) as u32 as f32;
 
             let offset = predictions[other_idx] - this_position;
             let dist = offset.length();
-
-            let dir = if dist <= f32::EPSILON {
-                vec2(this_density.cos(), this_density.sin()).normalize()
-            } else {
-                offset / dist
-            };
+            let dirmask = (dist > f32::EPSILON) as u32 as f32;
+            let dir = dirmask * offset / dist.max(f32::EPSILON);
 
             let slope = curves::smoothing_deriv(dist, settings.smoothing_radius);
             let pressure = curves::density_to_pressure(
@@ -279,7 +272,7 @@ pub fn pressure_force(
             );
             let pressure_shared = (this_pressure + pressure) / 2.0; // newton's third law
 
-            force += pressure_shared * dir * slope * settings.mass / densities[other_idx];
+            force += pressure_shared * dir * slope * settings.mass * mask / densities[other_idx];
         }
     }
 
@@ -318,15 +311,12 @@ pub fn viscosity(
         for lookup_id in begin..end {
             let other_id = lookup[lookup_id as usize];
             let other_idx = other_id as usize;
-
-            if idx == other_idx {
-                continue;
-            }
+            let mask = (idx != other_idx) as u32 as f32;
 
             let dist = position.distance(predictions[other_idx]);
             let influence = curves::viscosity_smoothing(dist, settings.smoothing_radius);
 
-            force += (velocities[other_idx] - velocities[idx]) * influence;
+            force += (velocities[other_idx] - velocities[idx]) * influence * mask;
         }
     }
 
