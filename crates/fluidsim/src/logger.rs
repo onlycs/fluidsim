@@ -1,5 +1,5 @@
 use log::LevelFilter;
-use skuld::log::SkuldLogger;
+use simple_logger::SimpleLogger;
 
 #[cfg(debug_assertions)]
 const LOG_LEVEL: LevelFilter = LevelFilter::Debug;
@@ -7,8 +7,7 @@ const LOG_LEVEL: LevelFilter = LevelFilter::Debug;
 const LOG_LEVEL: LevelFilter = LevelFilter::Info;
 
 pub fn init() {
-    SkuldLogger::new("/home/angad/.cache/fluidsim/log.txt".into())
-        .unwrap()
+    SimpleLogger::new()
         .with_level(LevelFilter::Info)
         .with_module("fluidsim", LOG_LEVEL)
         .with_module("wgpu_hal", LevelFilter::Error)

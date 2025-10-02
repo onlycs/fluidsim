@@ -22,7 +22,6 @@ extern crate pollster;
 extern crate rand;
 extern crate rayon;
 extern crate skuld;
-extern crate thiserror;
 extern crate wgpu;
 extern crate winit;
 
@@ -36,6 +35,8 @@ cfg_if! {
         extern crate web_time;
 
         use wasm_bindgen::prelude::*;
+    } else {
+        extern crate simple_logger;
     }
 }
 

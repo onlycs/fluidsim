@@ -1,2 +1,5 @@
 /target
 **/target
+.direnv
+shell.nix
+.envrc
