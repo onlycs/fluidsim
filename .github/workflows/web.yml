@@ -38,7 +38,7 @@ jobs:
 
       - name: Build
         run: |
-          apt install -y sccache
+          sudo apt install -y sccache
           cd crates/fluidsim
           wasm-pack build --target web --release --locked
           mv pkg ../..
