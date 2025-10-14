@@ -1,9 +1,12 @@
 use std::ops::{Deref, DerefMut};
 use wgpu_sort::GPUSorter;
 
-use super::bindings::*;
+use super::buffers::*;
 use crate::prelude::*;
+use crate::renderer::shader::pipelines::Pipelines;
 use crate::renderer::wgpu_state::WgpuData;
+
+const MAX_ARRAY: [u32; ARRAY_LEN] = [u32::MAX; ARRAY_LEN];
 
 #[derive(Default)]
 pub struct UserData {
@@ -29,203 +32,50 @@ pub struct ComputeData {
     pub user: UserData,
 
     pub buffers: Buffers,
-    pub bind_groups: BindGroups,
     pub update: UpdateState,
 
-    pub pipelines: [wgpu::ComputePipeline; 10],
+    pub pipelines: Pipelines,
     pub pass_desc: wgpu::ComputePassDescriptor<'static>,
-    pub sorter: GPUSorter,
 }
 
 // creation and updating scene settings, etc
 impl ComputeData {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
-        let usr = UserData::default();
-        let sorter = GPUSorter::new(device, 64);
-        let len = NonZeroU32::new(ARRAY_LEN as u32).unwrap();
-        let sort_bufs = sorter.create_sort_buffers(device, len);
-
-        let user_buffers = user_data::buffers(device);
-        let physics_buffers = physics::buffers(device);
-        let shared = prims::buf(device);
-        let starts = spatial_hash::starts_buf(device);
-        let lookup = sort_bufs.values();
-        let keys = sort_bufs.keys();
-
-        let user_bgl = user_data::bind_group_layout(device, &user_buffers);
-        let physics_bgl = physics::bind_group_layout(device, &physics_buffers);
-        let rendering_bgl = prims::bind_group_layout(device, &shared);
-        let spatial_bgl = spatial_hash::bind_group_layout(device, [lookup, &starts, keys]);
-
-        let user_bg = user_data::bind_group(device, &user_bgl, &user_buffers);
-        let physics_bg = physics::bind_group(device, &physics_bgl, &physics_buffers);
-        let rendering_bg = prims::bind_group(device, &rendering_bgl, &shared);
-        let spatial_bg = spatial_hash::bind_group(device, &spatial_bgl, [lookup, &starts, keys]);
-
-        let [settings, mouse] = user_buffers;
-        let [positions, predictions, velocities, densities] = physics_buffers;
-
-        // initialize some nonzero buffers
-        queue.write_buffer(lookup, 0, bytemuck::cast_slice(&vec![u32::MAX; ARRAY_LEN]));
-        queue.write_buffer(&starts, 0, bytemuck::cast_slice(&vec![u32::MAX; ARRAY_LEN]));
-        queue.write_buffer(keys, 0, bytemuck::cast_slice(&vec![u32::MAX; ARRAY_LEN]));
-
-        let buffers = Buffers {
-            settings,
-            mouse,
-            positions,
-            predictions,
-            velocities,
-            densities,
-            prims: Arc::new(shared),
-            starts,
-            sort_bufs,
-        };
-
-        let bind_layouts: BindGroupLayouts = BindGroupLayouts {
-            user: user_bgl,
-            physics: physics_bgl,
-            rendering: rendering_bgl,
-            spatial: spatial_bgl,
-        };
-
-        let bind_groups = BindGroups {
-            user: user_bg,
-            physics: physics_bg,
-            rendering: rendering_bg,
-            spatial: spatial_bg,
-        };
-
         let shader = device.create_shader_module(super::SHADER.clone());
 
-        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("physics$layout"),
-            bind_group_layouts: &[
-                &bind_layouts.user,
-                &bind_layouts.physics,
-                &bind_layouts.rendering,
-                &bind_layouts.spatial,
-            ],
-            push_constant_ranges: &[],
-        });
+        let sorter = GPUSorter::new(device, 64);
+        let len = NonZeroU32::new(ARRAY_LEN as u32).unwrap();
+        let sort_buffers = sorter.create_sort_buffers(device, len);
 
-        let pipeline_desc = [
-            // 1. external forces
-            wgpu::ComputePipelineDescriptor {
-                label: Some("physics::external_forces$pipeline"),
-                layout: Some(&layout),
-                module: &shader,
-                entry_point: Some("external_forces"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                cache: None,
-            },
-            // 2. update predictions
-            wgpu::ComputePipelineDescriptor {
-                label: Some("physics::update_predictions$pipeline"),
-                layout: Some(&layout),
-                module: &shader,
-                entry_point: Some("update_predictions"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                cache: None,
-            },
-            // 3a. pre-sort
-            wgpu::ComputePipelineDescriptor {
-                label: Some("physics::pre_sort$pipeline"),
-                layout: Some(&layout),
-                module: &shader,
-                entry_point: Some("pre_sort"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                cache: None,
-            },
-            // 3b. sort (not a pipeline)
-            // 3c. post-sort
-            wgpu::ComputePipelineDescriptor {
-                label: Some("physics::post_sort$pipeline"),
-                layout: Some(&layout),
-                module: &shader,
-                entry_point: Some("post_sort"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                cache: None,
-            },
-            // 4. update densities
-            wgpu::ComputePipelineDescriptor {
-                label: Some("physics::update_densities$pipeline"),
-                layout: Some(&layout),
-                module: &shader,
-                entry_point: Some("update_densities"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                cache: None,
-            },
-            // 5. pressure forces
-            wgpu::ComputePipelineDescriptor {
-                label: Some("physics::pressure_force$pipeline"),
-                layout: Some(&layout),
-                module: &shader,
-                entry_point: Some("pressure_force"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                cache: None,
-            },
-            // 6. viscosity forces
-            wgpu::ComputePipelineDescriptor {
-                label: Some("physics::viscosity$pipeline"),
-                layout: Some(&layout),
-                module: &shader,
-                entry_point: Some("viscosity"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                cache: None,
-            },
-            // end: update positions
-            wgpu::ComputePipelineDescriptor {
-                label: Some("physics::update_positions$pipeline"),
-                layout: Some(&layout),
-                module: &shader,
-                entry_point: Some("update_positions"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                cache: None,
-            },
-            // end: collision resolution
-            wgpu::ComputePipelineDescriptor {
-                label: Some("physics::collide$pipeline"),
-                layout: Some(&layout),
-                module: &shader,
-                entry_point: Some("collide"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                cache: None,
-            },
-            // end: copy prims
-            wgpu::ComputePipelineDescriptor {
-                label: Some("physics::copy_prims$pipeline"),
-                layout: Some(&layout),
-                module: &shader,
-                entry_point: Some("copy_prims"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                cache: None,
-            },
-        ];
+        let usr = UserData::default();
+        let sort = Sort::new(sort_buffers);
+        let buffers = Buffers::new(device, sort);
+        let pipelines = Pipelines::new(device, &buffers, &shader, sorter);
 
-        let pass = wgpu::ComputePassDescriptor {
+        // initialize some nonzero buffers
+        buffers.spatial_hash.indices.reset(queue, &MAX_ARRAY);
+        buffers.sort.lookup.reset(queue, &MAX_ARRAY);
+        buffers.sort.keys.reset(queue, &MAX_ARRAY);
+
+        let pass_descriptor = wgpu::ComputePassDescriptor {
             label: Some("physics$pass"),
             timestamp_writes: None,
         };
 
-        let pipelines = pipeline_desc.map(|desc| device.create_compute_pipeline(&desc));
-
         Self {
             user: usr,
             buffers,
-            bind_groups,
             update: Default::default(),
             pipelines,
-            pass_desc: pass,
-            sorter,
+            pass_desc: pass_descriptor,
         }
     }
 
     pub fn prims_buf(&self) -> Arc<wgpu::Buffer> {
-        Arc::clone(&self.buffers.prims)
+        Arc::clone(&self.buffers.drawing.primitives.buffer)
     }
 
-    pub fn reset(&mut self, conditions: &InitialConditions) -> Vec<[f32; 2]> {
+    pub fn reset(&mut self, conditions: &InitialConditions) -> Box<[[f32; 2]; ARRAY_LEN]> {
         let nx = conditions.particles.x;
         let ny = conditions.particles.y;
         let size = self.user.settings.particle_radius * 2.0;
@@ -239,7 +89,7 @@ impl ComputeData {
             );
 
         // clear all
-        let mut positions = vec![[0.0; 2]; ARRAY_LEN];
+        let mut positions = Box::new([[0.0; 2]; ARRAY_LEN]);
         self.user.settings.num_particles = nx as u32 * ny as u32;
 
         // create the particles
@@ -265,87 +115,57 @@ impl ComputeData {
 
     pub fn update(
         &mut self,
+        device: &wgpu::Device,
         queue: &wgpu::Queue,
         conditions: &InitialConditions,
         encoder: &mut wgpu::CommandEncoder,
         dtime: f32,
-    ) {
-        let num_workgroups = self.user.settings.num_particles.div_ceil(WORKGROUP_SIZE);
+    ) -> Option<wgpu::Buffer> {
         self.user.settings.dtime = dtime;
-        queue.write_buffer(
-            &self.buffers.settings,
-            0,
-            bytemuck::cast_slice(&[self.user.settings]),
-        );
+        self.buffers
+            .user_data
+            .settings
+            .reset(queue, &[self.user.settings]);
 
         if self.update.reset {
             let new_pos = self.reset(conditions);
-            let empty_vec2s = vec![[0f32; 2]; ARRAY_LEN];
-            let empty_f32s = vec![0f32; ARRAY_LEN];
+            const EMPTY_VEC2: [[f32; 2]; ARRAY_LEN] = [[0f32; 2]; ARRAY_LEN];
 
-            let Buffers {
-                positions,
-                predictions,
-                velocities,
-                densities,
-                sort_bufs,
-                starts,
-                ..
-            } = &self.buffers;
+            self.buffers.physics.positions.reset(queue, &new_pos);
+            self.buffers.physics.predictions.reset(queue, &EMPTY_VEC2);
+            self.buffers.physics.velocities.reset(queue, &EMPTY_VEC2);
+            self.buffers.physics.densities.reset(queue, &EMPTY_VEC2);
+            self.buffers.spatial_hash.indices.reset(queue, &MAX_ARRAY);
+            self.buffers.sort.lookup.reset(queue, &MAX_ARRAY);
+            self.buffers.sort.keys.reset(queue, &MAX_ARRAY);
 
-            let lookup = sort_bufs.values();
-            let keys = sort_bufs.keys();
-            queue.write_buffer(positions, 0, bytemuck::cast_slice(&new_pos));
-            queue.write_buffer(predictions, 0, bytemuck::cast_slice(&empty_vec2s));
-            queue.write_buffer(velocities, 0, bytemuck::cast_slice(&empty_vec2s));
-            queue.write_buffer(densities, 0, bytemuck::cast_slice(&empty_f32s));
-            queue.write_buffer(lookup, 0, bytemuck::cast_slice(&vec![u32::MAX; ARRAY_LEN]));
-            queue.write_buffer(starts, 0, bytemuck::cast_slice(&vec![u32::MAX; ARRAY_LEN]));
-            queue.write_buffer(keys, 0, bytemuck::cast_slice(&vec![u32::MAX; ARRAY_LEN]));
-
-            // run only the last pipeline on a reset
-            let mut pass = encoder.begin_compute_pass(&self.pass_desc);
-            pass.set_pipeline(&self.pipelines[self.pipelines.len() - 1]);
-            pass.set_bind_group(0, &self.bind_groups.user, &[]);
-            pass.set_bind_group(1, &self.bind_groups.physics, &[]);
-            pass.set_bind_group(2, &self.bind_groups.rendering, &[]);
-            pass.set_bind_group(3, &self.bind_groups.spatial, &[]);
-            pass.dispatch_workgroups(num_workgroups, 1, 1);
+            self.pipelines.copy_prims.dispatch(
+                encoder,
+                &self.pass_desc,
+                self.user.settings.num_particles,
+            );
 
             self.update.reset = false;
-            return;
+            return None;
         }
 
         if self.update.mouse {
-            queue.write_buffer(
-                &self.buffers.mouse,
-                0,
-                bytemuck::cast_slice(&[self.user.mouse]),
-            );
+            self.buffers
+                .user_data
+                .mouse
+                .reset(queue, &[self.user.mouse]);
 
             self.update.mouse = false;
         }
 
-        for (i, pipeline) in self.pipelines.iter().enumerate() {
-            let mut pass = encoder.begin_compute_pass(&self.pass_desc);
-            pass.set_pipeline(pipeline);
-            pass.set_bind_group(0, &self.bind_groups.user, &[]);
-            pass.set_bind_group(1, &self.bind_groups.physics, &[]);
-            pass.set_bind_group(2, &self.bind_groups.rendering, &[]);
-            pass.set_bind_group(3, &self.bind_groups.spatial, &[]);
-            pass.dispatch_workgroups(num_workgroups, 1, 1);
-
-            drop(pass);
-
-            if i == 2 {
-                self.sorter.sort(
-                    encoder,
-                    queue,
-                    &self.buffers.sort_bufs,
-                    Some(self.user.settings.num_particles),
-                );
-            }
-        }
+        Some(self.pipelines.dispatch_all(
+            device,
+            encoder,
+            queue,
+            &self.buffers,
+            &self.pass_desc,
+            self.user.settings.num_particles,
+        ))
     }
 }
 

@@ -1,11 +1,16 @@
 use std::{
     io,
     ops::{Deref, DerefMut},
+    sync::{
+        Mutex,
+        atomic::{self, AtomicBool},
+    },
 };
 
+use super::shader::pipelines::ComputeShaderPerformance;
 use glyphon::{
     Attrs, Buffer, Cache, Color, FontSystem, Metrics, Resolution, SwashCache, TextArea, TextAtlas,
-    TextBounds, TextRenderer, Viewport,
+    TextBounds, TextRenderer, Viewport, Weight,
 };
 use wgpu::{CommandEncoder, MultisampleState, TextureView};
 
@@ -15,7 +20,7 @@ use crate::prelude::*;
 const FONT_SIZE: f32 = 18.;
 const LINE_HEIGHT: f32 = 24.;
 
-pub struct FpsCounter {
+pub struct PerformanceDisplay {
     pub font_system: FontSystem,
     pub swash_cache: SwashCache,
     pub viewport: Viewport,
@@ -23,13 +28,17 @@ pub struct FpsCounter {
     pub renderer: TextRenderer,
     pub buffer: Buffer,
 
+    pub perf: Arc<Mutex<ComputeShaderPerformance>>,
+    pub last_perf: ComputeShaderPerformance,
+    pub enabled: Arc<AtomicBool>,
+
     pub timer: Instant,
-    pub frames: u32,
-    pub last_fps: f32,
+    pub frames: usize,
+    pub fps: f32,
 }
 
-impl FpsCounter {
-    pub fn new(wgpu: &WgpuData) -> Result<Self, io::Error> {
+impl PerformanceDisplay {
+    pub fn new(wgpu: &WgpuData, enabled: Arc<AtomicBool>) -> Result<Self, io::Error> {
         let size = wgpu.window.inner_size();
         let scale = wgpu.window.scale_factor() as f32;
 
@@ -69,9 +78,13 @@ impl FpsCounter {
             renderer,
             buffer,
 
+            enabled,
+            perf: Arc::new(Mutex::new(ComputeShaderPerformance::default())),
+            last_perf: ComputeShaderPerformance::default(),
+
             timer: Instant::now(),
             frames: 0,
-            last_fps: 0.,
+            fps: 0.,
         })
     }
 
@@ -79,8 +92,9 @@ impl FpsCounter {
         self.frames += 1;
 
         if self.timer.elapsed().as_secs_f32() > 1. {
-            self.last_fps = self.frames as f32 / self.timer.elapsed().as_secs_f32();
+            self.fps = self.frames as f32 / self.timer.elapsed().as_secs_f32();
             self.frames = 0;
+            self.last_perf = *&*self.perf.lock().unwrap();
             self.timer = Instant::now();
         }
     }
@@ -108,10 +122,18 @@ impl FpsCounter {
             ..
         } = wgpu;
 
+        let mut text = format!("FPS: {:.2}", self.fps);
+
+        if self.enabled.load(atomic::Ordering::Relaxed) {
+            text = format!("{}{text}", self.last_perf);
+        }
+
         buffer.set_text(
             font_system,
-            format!("FPS: {:.2}", self.last_fps).as_str(),
-            Attrs::new().family(glyphon::Family::Name("JetBrains Mono")),
+            text.as_str(),
+            &Attrs::new()
+                .family(glyphon::Family::Name("JetBrains Mono"))
+                .weight(Weight::LIGHT),
             glyphon::Shaping::Advanced,
         );
 
@@ -125,6 +147,7 @@ impl FpsCounter {
             },
         );
 
+        // RP1: draw fps
         renderer.prepare(
             device,
             queue,
@@ -134,7 +157,7 @@ impl FpsCounter {
             [TextArea {
                 buffer,
                 left: 10.,
-                top: config.height as f32 - 10. - LINE_HEIGHT,
+                top: config.height as f32 - 10. - (LINE_HEIGHT * (text.split("\n").count() as f32)),
                 scale: 1.,
                 bounds: TextBounds {
                     left: 0,
@@ -158,6 +181,7 @@ impl FpsCounter {
                         load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
                     },
+                    depth_slice: None,
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
@@ -174,29 +198,29 @@ impl FpsCounter {
 }
 
 #[derive(Default)]
-pub struct FpsState(Option<FpsCounter>);
+pub struct PerfDisplayState(Option<PerformanceDisplay>);
 
-impl FpsState {
+impl PerfDisplayState {
     pub fn uninit(&self) -> bool {
         self.0.is_none()
     }
 
-    pub fn init(&mut self, wgpu: &WgpuData) -> Result<(), io::Error> {
-        self.0 = Some(FpsCounter::new(wgpu)?);
+    pub fn init(&mut self, wgpu: &WgpuData, enabled: Arc<AtomicBool>) -> Result<(), io::Error> {
+        self.0 = Some(PerformanceDisplay::new(wgpu, enabled)?);
 
         Ok(())
     }
 }
 
-impl Deref for FpsState {
-    type Target = FpsCounter;
+impl Deref for PerfDisplayState {
+    type Target = PerformanceDisplay;
 
     fn deref(&self) -> &Self::Target {
         self.0.as_ref().unwrap()
     }
 }
 
-impl DerefMut for FpsState {
+impl DerefMut for PerfDisplayState {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.0.as_mut().unwrap()
     }

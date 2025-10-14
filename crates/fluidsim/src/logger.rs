@@ -9,12 +9,13 @@ const LOG_LEVEL: LevelFilter = LevelFilter::Info;
 pub fn init() {
     SimpleLogger::new()
         .with_level(LevelFilter::Info)
-        .with_module("fluidsim", LOG_LEVEL)
-        .with_module("wgpu_hal", LevelFilter::Error)
-        .with_module("wgpu_core", LevelFilter::Warn)
-        .with_module("eframe", LevelFilter::Warn)
-        .with_module("egui_wgpu", LevelFilter::Warn)
-        .with_module("wgpu_hal::gles::egl", LevelFilter::Error)
+        .with_module_level("fluidsim", LOG_LEVEL)
+        .with_module_level("wgpu_hal", LevelFilter::Info)
+        .with_module_level("wgpu_core", LevelFilter::Info)
+        .with_module_level("eframe", LevelFilter::Warn)
+        .with_module_level("egui_wgpu", LevelFilter::Warn)
+        .with_module_level("wgpu_hal::gles::egl", LevelFilter::Error)
+        .with_module_level("naga::front::spv", LevelFilter::Error)
         .init()
         .unwrap();
 }

@@ -1,8 +1,9 @@
 use lazy_static::lazy_static;
 use wgpu::include_spirv;
 
-mod bindings;
-pub(super) mod compute;
+mod buffers;
+pub mod compute;
+pub mod pipelines;
 pub(super) mod vertex;
 
 lazy_static! {

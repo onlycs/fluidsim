@@ -27,7 +27,7 @@ impl Default for InitialConditions {
     fn default() -> Self {
         Self {
             #[cfg(not(target_arch = "wasm32"))]
-            particles: Vec2::new(80., 80.),
+            particles: Vec2::new(60., 60.),
             #[cfg(target_arch = "wasm32")]
             particles: Vec2::new(30., 30.),
             gap: 0.05,

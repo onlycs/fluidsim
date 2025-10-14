@@ -2,7 +2,7 @@ use core::fmt;
 use lyon::tessellation::TessellationError;
 use std::{backtrace::Backtrace, io, panic::Location};
 use thiserror::Error;
-use wgpu::CreateSurfaceError;
+use wgpu::{CreateSurfaceError, RequestAdapterError};
 use winit::error::{EventLoopError, OsError};
 
 #[derive(Error)]
@@ -18,7 +18,7 @@ pub enum InitError {
 
 impl fmt::Debug for InitError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "\n{}", self)
+        write!(f, "\n{self}")
     }
 }
 
@@ -52,7 +52,12 @@ pub enum RendererError {
     NoTextureFormat { available: String },
 
     #[error("No adapter found")]
-    NoAdapter,
+    NoAdapter {
+        #[from]
+        source: RequestAdapterError,
+        location: &'static Location<'static>,
+        backtrace: Backtrace,
+    },
 
     #[error("At {location}: IO error:\n{source}")]
     Io {
@@ -65,7 +70,7 @@ pub enum RendererError {
 
 impl fmt::Debug for RendererError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "\n{}", self)
+        write!(f, "\n{self}")
     }
 }
 
@@ -90,7 +95,7 @@ pub enum ResumeError {
 
 impl fmt::Debug for ResumeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "\n{}", self)
+        write!(f, "\n{self}")
     }
 }
 
@@ -123,7 +128,7 @@ pub enum DrawError {
 
 impl fmt::Debug for DrawError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "\n{}", self)
+        write!(f, "\n{self}")
     }
 }
 
@@ -148,6 +153,6 @@ pub enum TextError {
 
 impl fmt::Debug for TextError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "\n{}", self)
+        write!(f, "\n{self}")
     }
 }

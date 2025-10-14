@@ -35,19 +35,7 @@ pub struct Settings {
     pub window_size: Vec2,
 
     pub _pad1: u32,
-    pub _pad2: u32,
-}
-
-impl Settings {
-    pub fn zero_gravity() -> Self {
-        Self {
-            gravity: 0.0,
-            target_density: 4.0,
-            pressure_multiplier: 20.0,
-            viscosity_strength: 0.5,
-            ..Default::default()
-        }
-    }
+    pub near_pressure_multiplier: f32,
 }
 
 impl Default for Settings {
@@ -59,16 +47,14 @@ impl Default for Settings {
             collision_damping: 0.40,
 
             smoothing_radius: 0.60,
-            #[cfg(not(target_arch = "wasm32"))]
-            target_density: 35.0,
-            #[cfg(target_arch = "wasm32")]
             target_density: 20.0,
 
-            pressure_multiplier: 150.0,
-            viscosity_strength: 0.06,
+            near_pressure_multiplier: 18.0,
+            pressure_multiplier: 500.0,
+            viscosity_strength: 0.12,
 
             interaction_radius: 4.0,
-            interaction_strength: 90.0,
+            interaction_strength: 65.0,
 
             // window size
             #[cfg(not(target_arch = "wasm32"))]
@@ -77,15 +63,14 @@ impl Default for Settings {
             window_size: Vec2::new(1500., 1000.),
 
             #[cfg(not(target_arch = "wasm32"))]
-            num_particles: 80 * 80,
+            num_particles: 60 * 60,
             #[cfg(target_arch = "wasm32")]
             num_particles: 30 * 30,
 
             mass: 1.0,
-            particle_radius: 0.035,
+            particle_radius: 0.045,
 
             _pad1: 0,
-            _pad2: 0,
         }
     }
 }
@@ -113,11 +98,7 @@ impl MouseState {
             return 0.0;
         }
 
-        if self.left() {
-            1.0
-        } else {
-            -1.0
-        }
+        if self.left() { 1.0 } else { -1.0 }
     }
 
     pub fn active(&self) -> bool {
@@ -161,4 +142,4 @@ pub struct Globals {
 
 pub const SCALE: f32 = 100.0;
 pub const ARRAY_LEN: usize = 16384;
-pub const WORKGROUP_SIZE: u32 = 64;
+pub const WORKGROUP_SIZE: u32 = 256;

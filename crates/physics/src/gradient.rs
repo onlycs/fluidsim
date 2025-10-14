@@ -1,4 +1,4 @@
-use spirv_std::glam::{vec4, Vec4};
+use spirv_std::glam::{Vec4, vec4};
 
 pub struct LinearGradient<const N: usize> {
     frame_positions: [f32; N],
@@ -46,5 +46,16 @@ pub const VELOCITY: LinearGradient<4> = LinearGradient {
         vec4(81., 252., 147., 255.),
         vec4(252., 237., 6., 255.),
         vec4(239., 74., 12., 255.),
+    ],
+};
+
+pub const VELOCITY2: LinearGradient<5> = LinearGradient {
+    frame_positions: [0.10, 0.30, 0.65, 0.80, 1.0],
+    frame_colors: [
+        vec4(60., 10., 99., 255.),
+        vec4(127., 31., 105., 255.),
+        vec4(227., 90., 44., 255.),
+        vec4(250., 151., 8., 255.),
+        vec4(245., 213., 66., 255.),
     ],
 };

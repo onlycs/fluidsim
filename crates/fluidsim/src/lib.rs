@@ -4,8 +4,7 @@
     let_chains,
     if_let_guard,
     trait_alias,
-    trivial_bounds,
-    generic_arg_infer
+    trivial_bounds
 )]
 
 #[macro_use]
@@ -21,7 +20,6 @@ extern crate lyon;
 extern crate pollster;
 extern crate rand;
 extern crate rayon;
-extern crate skuld;
 extern crate wgpu;
 extern crate winit;
 

@@ -1,3 +1,5 @@
+use std::sync::atomic::{self, AtomicBool};
+
 use crate::prelude::*;
 use egui::{Button, Context, RichText, Slider};
 
@@ -6,6 +8,7 @@ const TEXT_SIZE: f32 = 16.0;
 pub struct Panel {
     show_self: bool,
     show_help: bool,
+    show_perf: Arc<AtomicBool>,
 }
 
 impl Default for Panel {
@@ -13,6 +16,7 @@ impl Default for Panel {
         Self {
             show_self: true,
             show_help: true,
+            show_perf: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -24,6 +28,10 @@ pub struct UpdateData<'a> {
 }
 
 impl Panel {
+    pub fn show_perf(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.show_perf)
+    }
+
     /// Returns a function that should be used once to update the panel and synchronize updated settings
     pub fn update<'a>(
         &'a self,
@@ -68,11 +76,16 @@ impl Panel {
 
                 ui.add(Slider::new(&mut sim.smoothing_radius, 0.01..=4.0).text("Smoothing Radius"));
 
-                ui.add(Slider::new(&mut sim.target_density, 0.0..=200.0).text("Target Density"));
+                ui.add(Slider::new(&mut sim.target_density, 10.0..=175.0).text("Target Density"));
 
                 ui.add(
-                    Slider::new(&mut sim.pressure_multiplier, 0.0..=300.0)
+                    Slider::new(&mut sim.pressure_multiplier, 300.0..=700.0)
                         .text("Pressure Multiplier"),
+                );
+
+                ui.add(
+                    Slider::new(&mut sim.near_pressure_multiplier, 0.0..=50.0)
+                        .text("Near Pressure Multiplier"),
                 );
 
                 ui.add(
@@ -122,7 +135,7 @@ impl Panel {
                 ui.label(RichText::new("Presets").size(TEXT_SIZE).strong());
 
                 if ui
-                    .add_sized([180., 30.], Button::new("Default Settings"))
+                    .add_sized([240., 30.], Button::new("Default Settings"))
                     .clicked()
                 {
                     *reset = true;
@@ -130,17 +143,6 @@ impl Panel {
                         window_size: sim.window_size,
                         ..SimSettings::default()
                     }
-                }
-
-                if ui
-                    .add_sized([180., 30.], Button::new("Zero Gravity"))
-                    .clicked()
-                {
-                    *reset = true;
-                    *sim = SimSettings {
-                        window_size: sim.window_size,
-                        ..SimSettings::zero_gravity()
-                    };
                 }
 
                 if self.show_help {
@@ -151,6 +153,7 @@ impl Panel {
                     ui.label("Use the right mouse button to push particles");
                     ui.label("Press 'R' to restart");
                     ui.label("Press 'C' to toggle this panel");
+                    ui.label("Press 'P' to toggle debug performance info");
                     ui.label("Press 'H' to toggle this help text");
                 }
             });
@@ -179,5 +182,9 @@ impl Panel {
 
     pub fn toggle_self(&mut self) {
         self.show_self = !self.show_self;
+    }
+
+    pub fn toggle_perf(&mut self) {
+        self.show_perf.fetch_not(atomic::Ordering::Relaxed);
     }
 }

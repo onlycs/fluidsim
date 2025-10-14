@@ -1,9 +1,9 @@
-use crate::prelude::*;
+use crate::{prelude::*, renderer::input::InputResponse};
 
 use egui::EguiState;
-use fps::{FpsCounter, FpsState};
-use input::{InputHelper, InputResponse};
+use input::InputHelper;
 use panel::{Panel, UpdateData};
+use performance::{PerfDisplayState, PerformanceDisplay};
 use shader::{
     compute::{self, ComputeState},
     vertex::VsState,
@@ -15,21 +15,20 @@ use winit::{
     event::WindowEvent,
     event_loop::ActiveEventLoop,
     keyboard::KeyCode,
-    window::{Window, WindowId},
+    window::{Fullscreen, Window, WindowId},
 };
 
 use self::compute::ComputeData;
 
 mod egui;
-mod fps;
 mod input;
 mod panel;
+mod performance;
 mod shader;
 mod state;
 mod wgpu_state;
 
 pub struct SimRenderer {
-    instance: wgpu::Instance,
     wgpu: WgpuState,
     shader: VsState,
     compute: ComputeState,
@@ -37,20 +36,17 @@ pub struct SimRenderer {
     egui: EguiState,
     panel: Panel,
 
-    fps: FpsState,
+    perf: PerfDisplayState,
     input: InputHelper,
     game: GameState,
 }
 
 impl SimRenderer {
     pub fn new() -> Self {
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::from_env_or_default());
-
         Self {
-            instance,
             wgpu: WgpuState::default(),
             game: GameState::new(),
-            fps: FpsState::default(),
+            perf: PerfDisplayState::default(),
             shader: VsState::default(),
             compute: ComputeState::default(),
             egui: EguiState::default(),
@@ -63,7 +59,7 @@ impl SimRenderer {
         self.wgpu.uninit()
             || self.egui.uninit()
             || self.shader.uninit()
-            || self.fps.uninit()
+            || self.perf.uninit()
             || self.compute.uninit()
     }
 
@@ -71,16 +67,11 @@ impl SimRenderer {
         let size = window.inner_size().to_vec2();
 
         // initialize late-init stuff
-        self.wgpu.init(window, &self.instance, size).await?;
+        self.wgpu.init(window, size).await?;
         self.compute.init(&self.wgpu);
         self.shader.init(&self.wgpu, self.compute.prims_buf())?;
         self.egui.init(&self.wgpu);
-        self.fps.init(&self.wgpu)?;
-
-        #[cfg(not(target_arch = "wasm32"))]
-        self.wgpu
-            .window
-            .set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+        self.perf.init(&self.wgpu, self.panel.show_perf())?;
 
         #[cfg(target_arch = "wasm32")]
         self.wgpu.window.set_min_inner_size(Some(WASM_WINDOW));
@@ -103,11 +94,11 @@ impl SimRenderer {
             .configure(&self.wgpu.device, &self.wgpu.config);
 
         // reconfigure fps counter
-        let FpsCounter {
+        let PerformanceDisplay {
             buffer,
             font_system,
             ..
-        } = &mut *self.fps;
+        } = &mut *self.perf;
 
         buffer.set_size(font_system, Some(size.x * scale), Some(size.y * scale));
     }
@@ -140,11 +131,18 @@ impl SimRenderer {
         });
 
         let framesteps = self.game.gfx.steps_per_frame;
-        let dtime = self.game.dtime().min(1. / 60.) / framesteps as f32;
+        let dtime = self.game.dtime() / framesteps as f32;
         let conditions = &self.game.init;
+        let mut readback_buffers = vec![];
 
         for _ in 0..framesteps {
-            self.compute.update(queue, conditions, &mut encoder, dtime);
+            readback_buffers.push(self.compute.update(
+                device,
+                queue,
+                conditions,
+                &mut encoder,
+                dtime,
+            ));
         }
 
         self.shader.update(&self.wgpu, self.compute.user.settings)?;
@@ -163,9 +161,10 @@ impl SimRenderer {
                     view: &msaa_view,
                     resolve_target: Some(&surface_view),
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
                     },
+                    depth_slice: None,
                 })],
                 depth_stencil_attachment: None,
                 occlusion_query_set: None,
@@ -185,7 +184,7 @@ impl SimRenderer {
         }
 
         // draw fps counter
-        self.fps.render(&self.wgpu, &mut encoder, &surface_view)?;
+        self.perf.render(&self.wgpu, &mut encoder, &surface_view)?;
 
         // draw egui
         {
@@ -216,13 +215,27 @@ impl SimRenderer {
         queue.submit(Some(encoder.finish()));
         surface_tex.present();
 
+        for buf in readback_buffers {
+            let Some(buf) = buf else { continue };
+            let p = Arc::clone(&self.perf.perf);
+            self.compute.pipelines.profile(queue, buf, move |profile| {
+                *p.lock().unwrap() = profile;
+            });
+        }
+
+        device.poll(wgpu::PollType::Poll).unwrap();
+
         Ok(())
     }
 }
 
 impl ApplicationHandler for SimRenderer {
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
         if self.uninit() {
+            return;
+        }
+
+        if self.wgpu.window.id() != id {
             return;
         }
 
@@ -243,6 +256,7 @@ impl ApplicationHandler for SimRenderer {
                         KeyCode::KeyR => self.compute.update.reset = true,
                         KeyCode::KeyC => self.panel.toggle_self(),
                         KeyCode::KeyH => self.panel.toggle_help(),
+                        KeyCode::KeyP => self.panel.toggle_perf(),
                         _ => {}
                     }
                 }
@@ -263,14 +277,18 @@ impl ApplicationHandler for SimRenderer {
                 event_loop.exit()
             }
             WindowEvent::RedrawRequested => {
-                self.draw().unwrap();
+                if let Err(e) = self.draw() {
+                    error!("Error during draw: {e}");
+                    return;
+                }
                 self.wgpu.window.request_redraw();
-                self.fps.update();
+                self.perf.update();
             }
             WindowEvent::Resized(size) => {
                 self.update_window_size(Vec2::new(size.width as f32, size.height as f32));
+                self.wgpu.window.request_redraw();
             }
-            WindowEvent::Occluded(true) => self.wgpu.window.request_redraw(),
+            WindowEvent::Occluded(false) => self.wgpu.window.request_redraw(),
             _ => {}
         }
     }
@@ -278,12 +296,9 @@ impl ApplicationHandler for SimRenderer {
     fn resumed(&mut self, ev: &ActiveEventLoop) {
         // rust iife lol
         (|| {
-            let win = ev.create_window(
-                Window::default_attributes()
-                    .with_active(true)
-                    // .with_fullscreen(Some(Fullscreen::Borderless(None)))
-                    .with_title("fluidsim"),
-            )?;
+            let win = ev.create_window(Window::default_attributes().with_title("fluidsim"))?;
+
+            win.set_fullscreen(Some(Fullscreen::Borderless(None)));
 
             cfg_if! {
                 if #[cfg(target_arch = "wasm32")] {

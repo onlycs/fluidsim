@@ -9,7 +9,7 @@ use lyon::{
         StrokeVertex, StrokeVertexConstructor, TessellationError, VertexBuffers,
     },
 };
-use wgpu::{util::DeviceExt, BindGroupLayoutDescriptor};
+use wgpu::{BindGroupLayoutDescriptor, util::DeviceExt};
 
 pub type VsGlobals = gpu_shared::Globals;
 pub type VsCirclePrimitive = gpu_shared::Primitive;

@@ -1,23 +1,22 @@
 [package]
 name = "fluidsim"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 bytemuck = "1.21.0"
 cfg-if = "1.0.0"
-glam = { version = "0.29.2", features = ["bytemuck"] }
-glyphon = "0.8.0"
+glam = { version = "=0.29.3", features = ["bytemuck"] }
 gpu-shared.workspace = true
 itertools = "0.14.0"
 lazy_static = "1.5.0"
 log = "0.4.25"
 lyon = "1.0.1"
 pollster = "0.4.0"
-rand = "0.8.5"
-rayon = "1.10.0"
+rand = "0.9.2"
+rayon = "1.11.0"
 thiserror = { git = "https://github.com/onlycs/thiserror" }
-wgpu = { version = "24.0.1", default-features = false, features = [
+wgpu = { version = "27.0.1", default-features = false, features = [
     "spirv",
     "dx12",
     "metal",
@@ -38,13 +37,16 @@ git = "https://github.com/emilk/egui"
 default-features = false
 features = ["links", "wayland", "x11"]
 
+[dependencies.glyphon]
+git = "https://github.com/onlycs/glyphon"
+
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = "0.1.6"
 console_log = "1.0"
-wasm-bindgen = "=0.2.99"
+wasm-bindgen = "0.2.104"
 wasm-bindgen-futures = "0.4.49"
 web-sys = { version = "0.3", features = ["Document", "Window", "Element"] }
-getrandom = { version = "0.2.3", features = ["js"] }
+getrandom = { version = "0.3.3", features = ["wasm_js"] }
 web-time = "1.1.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

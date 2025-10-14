@@ -20,13 +20,10 @@ impl WgpuState {
         self.0.is_none()
     }
 
-    pub async fn init(
-        &mut self,
-        window: Window,
-        instance: &wgpu::Instance,
-        window_size: Vec2,
-    ) -> Result<(), RendererError> {
+    pub async fn init(&mut self, window: Window, window_size: Vec2) -> Result<(), RendererError> {
         info!("Initializing renderer");
+
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::from_env_or_default());
 
         let window = Arc::new(window);
 
@@ -42,34 +39,30 @@ impl WgpuState {
                 force_fallback_adapter: false,
                 compatible_surface: Some(&surface),
             })
-            .await;
+            .await?;
 
-        let Some(adapter) = adapter else {
-            return Err(RendererError::NoAdapter);
-        };
-
-        let features = wgpu::Features::empty();
+        let features =
+            wgpu::Features::TIMESTAMP_QUERY | wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS;
         let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: None,
-                    required_features: features,
-                    #[cfg(not(target_arch = "wasm32"))]
-                    required_limits: wgpu::Limits::default(),
-                    #[cfg(target_arch = "wasm32")]
-                    required_limits: wgpu::Limits {
-                        max_storage_buffer_binding_size: 134217728,
-                        max_compute_workgroup_storage_size: 17408,
-                        ..wgpu::Limits::downlevel_defaults()
-                    },
-                    memory_hints: wgpu::MemoryHints::default(),
+            .request_device(&wgpu::DeviceDescriptor {
+                label: None,
+                required_features: features,
+                #[cfg(not(target_arch = "wasm32"))]
+                required_limits: wgpu::Limits::default(),
+                #[cfg(target_arch = "wasm32")]
+                required_limits: wgpu::Limits {
+                    max_storage_buffer_binding_size: 134217728,
+                    max_compute_workgroup_storage_size: 17408,
+                    ..wgpu::Limits::downlevel_defaults()
                 },
-                None,
-            )
+                memory_hints: wgpu::MemoryHints::default(),
+                experimental_features: wgpu::ExperimentalFeatures::disabled(),
+                trace: wgpu::Trace::Off,
+            })
             .await?;
 
         let caps = surface.get_capabilities(&adapter);
-        let selected_fmt = [wgpu::TextureFormat::Rgba8Unorm];
+        let selected_fmt = [wgpu::TextureFormat::Bgra8Unorm];
 
         let texture_fmt = caps
             .formats
@@ -94,8 +87,8 @@ impl WgpuState {
 
         #[cfg(target_arch = "wasm32")]
         {
-            use wasm_bindgen::prelude::Closure;
             use wasm_bindgen::JsCast;
+            use wasm_bindgen::prelude::Closure;
             use web_sys::Event;
             use winit::platform::web::WindowExtWebSys;
 
