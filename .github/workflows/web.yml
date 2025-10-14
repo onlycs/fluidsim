@@ -28,6 +28,10 @@ jobs:
 
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly-2025-06-30
+          default: true
+          override: true
 
       - name: Install wasm-pack via apt
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
