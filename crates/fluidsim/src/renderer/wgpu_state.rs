@@ -23,7 +23,10 @@ impl WgpuState {
     pub async fn init(&mut self, window: Window, window_size: Vec2) -> Result<(), RendererError> {
         info!("Initializing renderer");
 
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::from_env_or_default());
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::VULKAN,
+            ..wgpu::InstanceDescriptor::from_env_or_default()
+        });
 
         let window = Arc::new(window);
 

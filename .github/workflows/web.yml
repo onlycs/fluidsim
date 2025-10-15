@@ -38,11 +38,12 @@ jobs:
 
       - name: Build
         run: |
-          sudo apt install -y sccache
           cd crates/fluidsim
           wasm-pack build --target web --release --locked
           mv pkg ../..
           cd ../..
+        env:
+          RUSTC_WRAPPER: ""
 
       - name: Move files around
         run: |

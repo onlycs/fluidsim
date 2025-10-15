@@ -39,18 +39,18 @@ pub fn sample<const N: usize>(g: LinearGradient<N>, t: f32) -> Vec4 {
     }
 }
 
-pub const VELOCITY: LinearGradient<4> = LinearGradient {
-    frame_positions: [0.062, 0.48, 0.65, 1.0],
-    frame_colors: [
-        vec4(27., 71., 162., 255.),
-        vec4(81., 252., 147., 255.),
-        vec4(252., 237., 6., 255.),
-        vec4(239., 74., 12., 255.),
-    ],
-};
+// pub const VELOCITY: LinearGradient<4> = LinearGradient {
+//     frame_positions: [0.062, 0.48, 0.65, 1.0],
+//     frame_colors: [
+//         vec4(27., 71., 162., 255.),
+//         vec4(81., 252., 147., 255.),
+//         vec4(252., 237., 6., 255.),
+//         vec4(239., 74., 12., 255.),
+//     ],
+// };
 
-pub const VELOCITY2: LinearGradient<5> = LinearGradient {
-    frame_positions: [0.10, 0.30, 0.65, 0.80, 1.0],
+pub const VELOCITY: LinearGradient<5> = LinearGradient {
+    frame_positions: [0.10, 0.25, 0.50, 0.75, 1.0],
     frame_colors: [
         vec4(60., 10., 99., 255.),
         vec4(127., 31., 105., 255.),
