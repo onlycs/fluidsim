@@ -38,7 +38,7 @@ jobs:
 
       - name: Build
         run: |
-          wasm-pack build --target web --release --locked ./crates/fluidsim
+          wasm-pack build --target web --release ./crates/fluidsim --locked
           mv crates/fluidsim/pkg .
         env:
           RUSTC_WRAPPER: ""
