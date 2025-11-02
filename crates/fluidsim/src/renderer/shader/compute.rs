@@ -158,14 +158,29 @@ impl ComputeData {
             self.update.mouse = false;
         }
 
-        Some(self.pipelines.dispatch_all(
-            device,
-            encoder,
-            queue,
-            &self.buffers,
-            &self.pass_desc,
-            self.user.settings.num_particles,
-        ))
+        cfg_if::cfg_if! {
+            if #[cfg(not(target_arch = "wasm32"))] {
+                return Some(self.pipelines.dispatch_all(
+                    device,
+                    encoder,
+                    queue,
+                    &self.buffers,
+                    &self.pass_desc,
+                    self.user.settings.num_particles,
+                ));
+            } else {
+                self.pipelines.dispatch_all(
+                    device,
+                    encoder,
+                    queue,
+                    &self.buffers,
+                    &self.pass_desc,
+                    self.user.settings.num_particles,
+                );
+
+                None
+            }
+        }
     }
 }
 

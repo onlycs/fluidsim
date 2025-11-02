@@ -20,27 +20,48 @@ macro_rules! pipelines {
     (@dispatcher $v:ident $i:expr;) => ({});
 
     (@dispatcher $v:ident $i:expr; pre_sort $($entries:ident)*) => {
-        $v.push((|s, e, _q, b, d, n| {
-            e.write_timestamp(&b.profiler.query_set, $i);
-            s.pre_sort.dispatch(e, d, n);
-            e.write_timestamp(&b.profiler.query_set, $i + 1);
-        }) as Dispatcher);
+        ::cfg_if::cfg_if! {
+            if #[cfg(not(target_arch = "wasm32"))] {
+                $v.push((|s, e, _q, b, d, n| {
+                    e.write_timestamp(&b.profiler.query_set, $i);
+                    s.pre_sort.dispatch(e, d, n);
+                    e.write_timestamp(&b.profiler.query_set, $i + 1);
+                }) as Dispatcher);
 
-        $v.push((|s, e, q, b, _d, n| {
-            e.write_timestamp(&b.profiler.query_set, $i + 2);
-            s.sorter.sort(e, q, &b.sort.sort_buffers, Some(n));
-            e.write_timestamp(&b.profiler.query_set, $i + 3);
-        }) as Dispatcher);
+                $v.push((|s, e, q, b, _d, n| {
+                    e.write_timestamp(&b.profiler.query_set, $i + 2);
+                    s.sorter.sort(e, q, &b.sort.sort_buffers, Some(n));
+                    e.write_timestamp(&b.profiler.query_set, $i + 3);
+                }) as Dispatcher);
+            } else {
+                $v.push((|s, e, _q, _b, d, n| {
+                    s.pre_sort.dispatch(e, d, n);
+                }) as Dispatcher);
+
+                $v.push((|s, e, q, b, _d, n| {
+                    s.sorter.sort(e, q, &b.sort.sort_buffers, Some(n));
+                }) as Dispatcher);
+            }
+        }
 
         pipelines!(@dispatcher $v $i + 4; $($entries)*);
     };
 
     (@dispatcher $v:ident $i:expr; $entry:ident $($entries:ident)*) => {
-        $v.push((|s, e, _q, b, d, n| {
-            e.write_timestamp(&b.profiler.query_set, $i);
-            s.$entry.dispatch(e, d, n);
-            e.write_timestamp(&b.profiler.query_set, $i + 1);
-        }) as Dispatcher);
+        ::cfg_if::cfg_if! {
+            if #[cfg(not(target_arch = "wasm32"))] {
+                $v.push((|s, e, _q, b, d, n| {
+                    e.write_timestamp(&b.profiler.query_set, $i);
+                    s.$entry.dispatch(e, d, n);
+                    e.write_timestamp(&b.profiler.query_set, $i + 1);
+                }) as Dispatcher);
+            } else {
+                $v.push((|s, e, _q, _b, d, n| {
+                    s.$entry.dispatch(e, d, n);
+                }) as Dispatcher);
+            }
+        }
+
         pipelines!(@dispatcher $v $i + 2; $($entries)*);
     };
 
@@ -242,6 +263,7 @@ macro_rules! pipelines {
                 dispatchers.into_iter()
             }
 
+            #[cfg(not(target_arch = "wasm32"))]
             pub fn dispatch_all(
                 &self,
                 device: &wgpu::Device,
@@ -280,6 +302,22 @@ macro_rules! pipelines {
                 readback_buffer
             }
 
+            #[cfg(target_arch = "wasm32")]
+            pub fn dispatch_all(
+                &self,
+                device: &wgpu::Device,
+                encoder: &mut wgpu::CommandEncoder,
+                queue: &wgpu::Queue,
+                buffers: &Buffers,
+                descriptor: &wgpu::ComputePassDescriptor<'_>,
+                num_particles: u32,
+            ) {
+                for dispatch in Self::iter() {
+                    dispatch(self, encoder, queue, buffers, descriptor, num_particles);
+                }
+            }
+
+            #[cfg(not(target_arch = "wasm32"))]
             pub fn profile(&self, queue: &wgpu::Queue, readback_buffer: wgpu::Buffer, set_profiler: impl FnOnce(ComputeShaderPerformance) + Send + Sync + 'static) {
                 let period = queue.get_timestamp_period(); // ns/tick
 

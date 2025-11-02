@@ -34,7 +34,7 @@ pub fn smoothing_deriv(dist: f32, radius: f32) -> f32 {
     (dist - radius) * (VOLUME_DERIV / radius.powi(4))
 }
 
-pub fn smoothing_near_deriv(dist: f32, radius: f32) -> f32 {
+pub fn nsmoothing_deriv(dist: f32, radius: f32) -> f32 {
     if dist >= radius || dist == 0.0 {
         return 0.0;
     }

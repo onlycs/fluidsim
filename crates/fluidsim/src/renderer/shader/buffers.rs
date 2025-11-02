@@ -97,11 +97,13 @@ macro_rules! buffers {
             }
         }
 
+        #[cfg(not(target_arch = "wasm32"))]
         pub struct Profiler {
             pub query_set: wgpu::QuerySet,
             pub query_buffer: Arc<wgpu::Buffer>,
         }
 
+        #[cfg(not(target_arch = "wasm32"))]
         impl Profiler {
             fn new(device: &wgpu::Device) -> Self {
                 let query_set = device.create_query_set(&wgpu::QuerySetDescriptor {
@@ -127,6 +129,7 @@ macro_rules! buffers {
         pub struct Buffers {
             $(pub $gid: $gty,)+
             pub sort: Sort,
+            #[cfg(not(target_arch = "wasm32"))]
             pub profiler: Profiler,
         }
 
@@ -135,6 +138,7 @@ macro_rules! buffers {
                 Self {
                     $($gid: $gty::buffers(&device),)+
                     sort,
+                    #[cfg(not(target_arch = "wasm32"))]
                     profiler: Profiler::new(device),
                 }
             }

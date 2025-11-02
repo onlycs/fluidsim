@@ -8,6 +8,17 @@ use spirv_std::glam::{UVec3, Vec2, Vec4, vec2, vec4};
 use spirv_std::num_traits::Float;
 use spirv_std::spirv;
 
+fn q_rsqrt(value: f32) -> f32 {
+    let x2 = value * 0.5;
+    let mut y = value;
+    let i = y.to_bits();
+    let i = 0x5f3759df - (i >> 1);
+    y = f32::from_bits(i);
+    y = y * (1.5 - (x2 * y * y));
+
+    y
+}
+
 pub mod curves;
 pub mod gradient;
 pub mod sp_hash;
@@ -46,7 +57,6 @@ pub fn vs_main(
 }
 
 // Combined external forces and prediction pass
-#[allow(unused_variables)]
 #[spirv(compute(threads(256)))]
 pub fn external_forces(
     #[spirv(uniform, descriptor_set = 0, binding = 0)] settings: &Settings,
@@ -73,10 +83,8 @@ pub fn external_forces(
         let interaction_radius_sq = settings.interaction_radius * settings.interaction_radius;
 
         if dist2 < interaction_radius_sq {
-            let dist = dist2.sqrt();
-            let inv_dist = 1.0 / dist;
-            let inv_radius = 1.0 / settings.interaction_radius;
-            let edge = dist * inv_radius;
+            let inv_dist = q_rsqrt(dist2);
+            let edge = 1.0 / (inv_dist * settings.interaction_radius);
             let center = 1.0 - edge;
             let dir = offset * inv_dist;
             let strength = settings.interaction_strength * mouse.intensity();
@@ -95,7 +103,6 @@ pub fn external_forces(
     predictions[idx] = positions[idx] + velocities[idx] * LOOKAHEAD;
 }
 
-#[allow(unused_variables)]
 #[spirv(compute(threads(256)))]
 pub fn pre_sort(
     #[spirv(uniform, descriptor_set = 0, binding = 0)] settings: &Settings,
@@ -122,7 +129,6 @@ pub fn pre_sort(
     );
 }
 
-#[allow(unused_variables)]
 #[spirv(compute(threads(256)))]
 pub fn post_sort(
     #[spirv(uniform, descriptor_set = 0, binding = 0)] settings: &Settings,
@@ -143,7 +149,6 @@ pub fn post_sort(
     }
 }
 
-#[allow(unused_variables)]
 #[spirv(compute(threads(256)))]
 pub fn update_densities(
     #[spirv(uniform, descriptor_set = 0, binding = 0)] settings: &Settings,
@@ -205,7 +210,6 @@ pub fn update_densities(
     densities[idx] = vec2(density, near_density);
 }
 
-#[allow(unused_variables)]
 #[spirv(compute(threads(256)))]
 pub fn pressure_force(
     #[spirv(uniform, descriptor_set = 0, binding = 0)] settings: &Settings,
@@ -225,36 +229,36 @@ pub fn pressure_force(
 
     let idx = id as usize;
     let this_density = densities[idx].x;
-    let this_near_density = densities[idx].y;
+    let this_ndensity = densities[idx].y;
     let this_position = predictions[idx];
     let this_pressure = curves::density_to_pressure(
         this_density,
         settings.target_density,
         settings.pressure_multiplier,
     );
-    let this_near_pressure = this_near_density * settings.near_pressure_multiplier;
+    let this_npressure = this_ndensity * settings.near_pressure_multiplier;
 
     let cell = sp_hash::pos_to_cell(this_position, settings.smoothing_radius);
     let smoothing_radius_sq = settings.smoothing_radius * settings.smoothing_radius;
+
+    let this_pressure_term = this_pressure / this_density.powi(2);
+    let this_npressure_term = this_npressure / this_ndensity.max(f32::EPSILON).powi(2);
+
     let mut force = vec2(0.0, 0.0);
-    let inv_this_density = 1.0 / this_density;
 
     for neighbor_id in 0..9 {
         let other_cell = cell + sp_hash::NEIGHBORS[neighbor_id];
         let hash = sp_hash::cell_hash(other_cell);
         let key = sp_hash::key_from_hash(hash, settings.num_particles);
-        let mut curr_index = starts[key as usize];
+        let mut search_idx = starts[key as usize];
 
-        while curr_index < settings.num_particles {
-            let particle_key = keys[curr_index as usize];
-
-            if particle_key != key {
-                break;
-            }
-
-            let other_id = lookup[curr_index as usize];
+        while search_idx < settings.num_particles
+            && let particle_key = keys[search_idx as usize]
+            && particle_key == key
+        {
+            let other_id = lookup[search_idx as usize];
             let other_idx = other_id as usize;
-            curr_index += 1;
+            search_idx += 1;
 
             if idx == other_idx {
                 continue;
@@ -263,46 +267,40 @@ pub fn pressure_force(
             let offset = predictions[other_idx] - this_position;
             let dist_sq = offset.dot(offset);
 
-            if dist_sq > smoothing_radius_sq {
+            if dist_sq > smoothing_radius_sq || dist_sq < f32::EPSILON {
                 continue;
             }
 
-            let dist = dist_sq.sqrt();
-
-            if dist < f32::EPSILON {
-                continue;
-            }
-
-            let inv_dist = 1.0 / dist;
+            let inv_dist = q_rsqrt(dist_sq);
+            let dist = 1.0 / inv_dist;
             let dir = offset * inv_dist;
 
             let other_density = densities[other_idx].x;
-            let other_near_density = densities[other_idx].y;
+            let other_ndensity = densities[other_idx].y;
             let other_pressure = curves::density_to_pressure(
                 other_density,
                 settings.target_density,
                 settings.pressure_multiplier,
             );
-            let other_near_pressure = other_near_density * settings.near_pressure_multiplier;
+            let other_npressure = other_ndensity * settings.near_pressure_multiplier;
+            let other_pressure_term = other_pressure / other_density.powi(2);
+            let other_npressure_term = other_npressure / other_ndensity.max(f32::EPSILON).powi(2);
 
             // Regular pressure
-            let slope = curves::smoothing_deriv(dist, settings.smoothing_radius);
-            let pressure_shared = (this_pressure + other_pressure) * 0.5;
-            let inv_other_density = 1.0 / other_density;
-            force += pressure_shared * dir * slope * settings.mass * inv_other_density;
+            let smoothing_term = dir * curves::smoothing_deriv(dist, settings.smoothing_radius);
+            let pressure_term = this_pressure_term + other_pressure_term;
+            force += settings.mass * pressure_term * smoothing_term;
 
             // Near pressure (prevents clustering)
-            let nslope = curves::smoothing_near_deriv(dist, settings.smoothing_radius);
-            let npressure_shared = (this_near_pressure + other_near_pressure) * 0.5;
-            let inv_other_ndensity = 1.0 / other_near_density.max(f32::EPSILON);
-            force += npressure_shared * dir * nslope * settings.mass * inv_other_ndensity;
+            let nsmoothing_term = dir * curves::nsmoothing_deriv(dist, settings.smoothing_radius);
+            let npressure_term = this_npressure_term + other_npressure_term;
+            force += settings.mass * npressure_term * nsmoothing_term;
         }
     }
 
-    velocities[idx] += force * inv_this_density * settings.dtime;
+    velocities[idx] += force * settings.dtime;
 }
 
-#[allow(unused_variables)]
 #[spirv(compute(threads(256)))]
 pub fn viscosity(
     #[spirv(uniform, descriptor_set = 0, binding = 0)] settings: &Settings,
@@ -363,7 +361,6 @@ pub fn viscosity(
     velocities[idx] += force * settings.viscosity_strength * settings.dtime;
 }
 
-#[allow(unused_variables)]
 #[spirv(compute(threads(256)))]
 pub fn update_positions(
     #[spirv(uniform, descriptor_set = 0, binding = 0)] settings: &Settings,
@@ -381,7 +378,6 @@ pub fn update_positions(
     positions[idx] += velocities[idx] * settings.dtime;
 }
 
-#[allow(unused_variables)]
 #[spirv(compute(threads(256)))]
 pub fn collide(
     #[spirv(uniform, descriptor_set = 0, binding = 0)] settings: &Settings,
@@ -412,7 +408,6 @@ pub fn collide(
     }
 }
 
-#[allow(unused_variables)]
 #[spirv(compute(threads(256)))]
 pub fn copy_prims(
     #[spirv(uniform, descriptor_set = 0, binding = 0)] settings: &Settings,

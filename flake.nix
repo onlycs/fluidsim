@@ -29,7 +29,6 @@
           vulkan-loader
           vulkan-headers
           gcc.cc.lib
-          pkgsCross.mingwW64.windows.pthreads
         ];
       in
       {
@@ -45,6 +44,7 @@
               nil
               pkgsCross.mingwW64.stdenv.cc
               nixd
+              wasm-pack
             ]
             ++ libraries;
           RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";

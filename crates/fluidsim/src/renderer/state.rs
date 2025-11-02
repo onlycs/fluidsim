@@ -54,6 +54,6 @@ impl GameState {
         let dtime = now.duration_since(self.time.last_instant).as_secs_f64();
         self.time.last_instant = now;
 
-        dtime as f32 * self.gfx.speed
+        (dtime as f32).min(1.0 / 60.0) * self.gfx.speed
     }
 }

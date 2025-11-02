@@ -55,7 +55,6 @@
 				const ihtml = document.getElementById("help").innerHTML;
 				document.getElementById("help").innerHTML = ihtml.replaceAll("browser", "device");
 			} else if (!ua.includes("Chrome")) {
-				const ihtml = document.getElementById("help").innerHTML;
 				document.getElementById("help").innerHTML = "Your browser has not implemented WebGPU or is out of date.";
 			}
 		});

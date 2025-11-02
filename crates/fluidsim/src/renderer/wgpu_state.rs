@@ -24,7 +24,7 @@ impl WgpuState {
         info!("Initializing renderer");
 
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::VULKAN,
+            backends: wgpu::Backends::VULKAN | wgpu::Backends::BROWSER_WEBGPU,
             ..wgpu::InstanceDescriptor::from_env_or_default()
         });
 
@@ -44,12 +44,11 @@ impl WgpuState {
             })
             .await?;
 
-        let features =
-            wgpu::Features::TIMESTAMP_QUERY | wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS;
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: None,
-                required_features: features,
+                required_features: wgpu::Features::TIMESTAMP_QUERY
+                    | wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS,
                 #[cfg(not(target_arch = "wasm32"))]
                 required_limits: wgpu::Limits::default(),
                 #[cfg(target_arch = "wasm32")]

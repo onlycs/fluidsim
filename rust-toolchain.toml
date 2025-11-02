@@ -1,4 +1,4 @@
 [toolchain]
 channel = "nightly-2025-06-30"
 components = ["rust-src", "rustc-dev", "llvm-tools", "rustc-codegen-cranelift-preview"]
-targets = ["x86_64-pc-windows-gnu"]
+targets = ["x86_64-pc-windows-gnu", "wasm32-unknown-unknown"]

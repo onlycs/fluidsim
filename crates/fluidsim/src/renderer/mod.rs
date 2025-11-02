@@ -215,15 +215,19 @@ impl SimRenderer {
         queue.submit(Some(encoder.finish()));
         surface_tex.present();
 
-        for buf in readback_buffers {
-            let Some(buf) = buf else { continue };
-            let p = Arc::clone(&self.perf.perf);
-            self.compute.pipelines.profile(queue, buf, move |profile| {
-                *p.lock().unwrap() = profile;
-            });
-        }
+        cfg_if! {
+            if #[cfg(not(target_arch = "wasm32"))] {
+                for buf in readback_buffers {
+                    let Some(buf) = buf else { continue };
+                    let p = Arc::clone(&self.perf.perf);
+                    self.compute.pipelines.profile(queue, buf, move |profile| {
+                        *p.lock().unwrap() = profile;
+                    });
+                }
 
-        device.poll(wgpu::PollType::Poll).unwrap();
+                device.poll(wgpu::PollType::Poll).unwrap();
+            }
+        }
 
         Ok(())
     }

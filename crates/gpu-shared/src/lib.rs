@@ -49,7 +49,7 @@ impl Default for Settings {
             smoothing_radius: 0.60,
             target_density: 20.0,
 
-            near_pressure_multiplier: 18.0,
+            near_pressure_multiplier: 50.0,
             pressure_multiplier: 500.0,
             viscosity_strength: 0.12,
 
@@ -68,7 +68,7 @@ impl Default for Settings {
             num_particles: 30 * 30,
 
             mass: 1.0,
-            particle_radius: 0.045,
+            particle_radius: 0.05,
 
             _pad1: 0,
         }

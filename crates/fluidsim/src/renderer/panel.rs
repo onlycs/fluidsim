@@ -76,10 +76,10 @@ impl Panel {
 
                 ui.add(Slider::new(&mut sim.smoothing_radius, 0.01..=4.0).text("Smoothing Radius"));
 
-                ui.add(Slider::new(&mut sim.target_density, 10.0..=175.0).text("Target Density"));
+                ui.add(Slider::new(&mut sim.target_density, 0.1..=175.0).text("Target Density"));
 
                 ui.add(
-                    Slider::new(&mut sim.pressure_multiplier, 300.0..=700.0)
+                    Slider::new(&mut sim.pressure_multiplier, 1.0..=700.0)
                         .text("Pressure Multiplier"),
                 );
 
