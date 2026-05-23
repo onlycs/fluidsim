@@ -15,8 +15,15 @@ impl GraphicsContext {
     pub async fn new(window: Window, window_size: Vec2) -> Result<Self, RendererError> {
         info!("Initializing renderer");
 
-        let instance =
-            wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            #[cfg(target_os = "linux")]
+            backends: wgpu::Backends::VULKAN,
+            #[cfg(target_os = "windows")]
+            backends: wgpu::Backends::DX12 | wgpu::Backends::VULKAN,
+            #[cfg(target_os = "macos")]
+            backends: wgpu::Backends::METAL,
+            ..wgpu::InstanceDescriptor::new_without_display_handle_from_env()
+        });
 
         let window = Arc::new(window);
 

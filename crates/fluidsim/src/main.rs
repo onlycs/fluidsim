@@ -11,6 +11,10 @@
     clippy::wildcard_imports,
     clippy::large_enum_variant
 )]
+#![cfg_attr(
+    all(not(debug_assertions), target_os = "windows"),
+    windows_subsystem = "windows"
+)]
 
 #[macro_use]
 extern crate tracing;

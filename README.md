@@ -1,16 +1,15 @@
 # fluidsim
 
-## Online Demo
-
-Note that this project was never supposed to run in the browser. I made the bare minimum possible changes to get it working with WebGPU. Your computer WILL freeze if it does not have enough RAM or CPU.
-
-That being said, visit [fluidsim.angad.page](https://fluidsim.angad.page) to try it out.
-
 ## Windows
 
 Despite my best efforts, this application crashes on my Windows VM. I have only ever gotten it to work on Linux.
 
-That being said, a release binary is available from the [releases page](https://github.com/onlycs/fluidsim/releases). It dynamically links to
+Oddly enough, the Windows binary I built worked on Wine (???). Somehow we came full circle and made a Windows application that only runs on Linux.
+I did not keep this build, unfortunately.
+
+## Linux
+
+A release binary is available from the [releases page](https://github.com/onlycs/fluidsim/releases). It dynamically links to
 
 - `libvulkan.so.1`
 - `libwayland-client.so.0`
