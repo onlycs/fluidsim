@@ -100,7 +100,7 @@ pub fn external_forces(
     velocities[idx] += force * settings.dtime;
 
     // Predict position immediately (combined pass)
-    const LOOKAHEAD: f32 = 1.0 / 120.0;
+    const LOOKAHEAD: f32 = 3.0 / 165.0;
     predictions[idx] = positions[idx] + velocities[idx] * LOOKAHEAD;
 }
 
