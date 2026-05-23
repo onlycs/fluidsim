@@ -23,10 +23,8 @@ impl WgpuState {
     pub async fn init(&mut self, window: Window, window_size: Vec2) -> Result<(), RendererError> {
         info!("Initializing renderer");
 
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::VULKAN | wgpu::Backends::BROWSER_WEBGPU,
-            ..wgpu::InstanceDescriptor::from_env_or_default()
-        });
+        let instance =
+            wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
 
         let window = Arc::new(window);
 
@@ -49,14 +47,7 @@ impl WgpuState {
                 label: None,
                 required_features: wgpu::Features::TIMESTAMP_QUERY
                     | wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS,
-                #[cfg(not(target_arch = "wasm32"))]
                 required_limits: wgpu::Limits::default(),
-                #[cfg(target_arch = "wasm32")]
-                required_limits: wgpu::Limits {
-                    max_storage_buffer_binding_size: 134217728,
-                    max_compute_workgroup_storage_size: 17408,
-                    ..wgpu::Limits::downlevel_defaults()
-                },
                 memory_hints: wgpu::MemoryHints::default(),
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
                 trace: wgpu::Trace::Off,
@@ -86,47 +77,6 @@ impl WgpuState {
         };
 
         surface.configure(&device, &surface_cfg);
-
-        #[cfg(target_arch = "wasm32")]
-        {
-            use wasm_bindgen::JsCast;
-            use wasm_bindgen::prelude::Closure;
-            use web_sys::Event;
-            use winit::platform::web::WindowExtWebSys;
-
-            web_sys::window()
-                .and_then(|win| win.document())
-                .and_then(|doc| {
-                    let dest = doc.get_element_by_id("fluidsim")?;
-                    let canvas = web_sys::Element::from(window.canvas()?);
-                    dest.append_child(&canvas).ok()?;
-                    Some(doc)
-                })
-                .and_then(|doc| {
-                    let canvas = doc.query_selector("canvas").ok()??;
-                    let help = doc.get_element_by_id("onboard-help")?;
-                    help.set_attribute("style", "display: block;").ok()?;
-
-                    let onclick = Closure::new(Box::new(move |_| {
-                        doc.query_selector("canvas")
-                            .unwrap()
-                            .unwrap()
-                            .set_attribute("style", "width: 100vw; height: 100vh;")
-                            .unwrap();
-
-                        help.set_attribute("style", "display: none;").ok().unwrap();
-                    }) as Box<dyn FnMut(Event)>);
-
-                    canvas
-                        .add_event_listener_with_callback("click", onclick.as_ref().unchecked_ref())
-                        .ok()?;
-
-                    onclick.forget();
-
-                    Some(())
-                })
-                .unwrap();
-        }
 
         self.0 = Some(WgpuData {
             surface,

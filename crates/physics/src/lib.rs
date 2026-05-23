@@ -1,5 +1,5 @@
 #![no_std]
-#![allow(unexpected_cfgs, unused_imports)]
+#![allow(unexpected_cfgs, unused_imports, clippy::too_many_arguments)]
 
 use core::f32;
 
@@ -23,7 +23,6 @@ pub mod curves;
 pub mod gradient;
 pub mod sp_hash;
 
-#[inline(never)]
 #[spirv(fragment)]
 pub fn fs_main(input: Vec4, output: &mut Vec4) {
     *output = input;

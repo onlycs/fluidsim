@@ -1,5 +1,4 @@
 use std::{
-    io,
     ops::{Deref, DerefMut},
     sync::{
         Mutex,
@@ -38,7 +37,7 @@ pub struct PerformanceDisplay {
 }
 
 impl PerformanceDisplay {
-    pub fn new(wgpu: &WgpuData, enabled: Arc<AtomicBool>) -> Result<Self, io::Error> {
+    pub fn new(wgpu: &WgpuData, enabled: Arc<AtomicBool>) -> Self {
         let size = wgpu.window.inner_size();
         let scale = wgpu.window.scale_factor() as f32;
 
@@ -70,7 +69,7 @@ impl PerformanceDisplay {
             .to_vec(),
         );
 
-        Ok(Self {
+        Self {
             font_system,
             swash_cache,
             viewport,
@@ -85,7 +84,7 @@ impl PerformanceDisplay {
             timer: Instant::now(),
             frames: 0,
             fps: 0.,
-        })
+        }
     }
 
     pub fn update(&mut self) {
@@ -94,7 +93,7 @@ impl PerformanceDisplay {
         if self.timer.elapsed().as_secs_f32() > 1. {
             self.fps = self.frames as f32 / self.timer.elapsed().as_secs_f32();
             self.frames = 0;
-            self.last_perf = *&*self.perf.lock().unwrap();
+            self.last_perf = *self.perf.lock().unwrap();
             self.timer = Instant::now();
         }
     }
@@ -135,6 +134,7 @@ impl PerformanceDisplay {
                 .family(glyphon::Family::Name("JetBrains Mono"))
                 .weight(Weight::LIGHT),
             glyphon::Shaping::Advanced,
+            None,
         );
 
         buffer.shape_until_scroll(font_system, false);
@@ -157,7 +157,7 @@ impl PerformanceDisplay {
             [TextArea {
                 buffer,
                 left: 10.,
-                top: config.height as f32 - 10. - (LINE_HEIGHT * (text.split("\n").count() as f32)),
+                top: config.height as f32 - 10. - (LINE_HEIGHT * (text.split('\n').count() as f32)),
                 scale: 1.,
                 bounds: TextBounds {
                     left: 0,
@@ -186,6 +186,7 @@ impl PerformanceDisplay {
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
+                multiview_mask: None,
             });
 
             renderer.render(atlas, viewport, &mut pass)?;
@@ -205,10 +206,8 @@ impl PerfDisplayState {
         self.0.is_none()
     }
 
-    pub fn init(&mut self, wgpu: &WgpuData, enabled: Arc<AtomicBool>) -> Result<(), io::Error> {
-        self.0 = Some(PerformanceDisplay::new(wgpu, enabled)?);
-
-        Ok(())
+    pub fn init(&mut self, wgpu: &WgpuData, enabled: Arc<AtomicBool>) {
+        self.0 = Some(PerformanceDisplay::new(wgpu, enabled));
     }
 }
 

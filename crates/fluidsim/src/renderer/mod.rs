@@ -9,6 +9,7 @@ use shader::{
     vertex::VsState,
 };
 use state::GameState;
+use wgpu::CurrentSurfaceTexture;
 use wgpu_state::WgpuState;
 use winit::{
     application::ApplicationHandler,
@@ -69,12 +70,9 @@ impl SimRenderer {
         // initialize late-init stuff
         self.wgpu.init(window, size).await?;
         self.compute.init(&self.wgpu);
-        self.shader.init(&self.wgpu, self.compute.prims_buf())?;
+        self.shader.init(&self.wgpu, &self.compute.prims_buf())?;
         self.egui.init(&self.wgpu);
-        self.perf.init(&self.wgpu, self.panel.show_perf())?;
-
-        #[cfg(target_arch = "wasm32")]
-        self.wgpu.window.set_min_inner_size(Some(WASM_WINDOW));
+        self.perf.init(&self.wgpu, self.panel.show_perf());
 
         Ok(())
     }
@@ -103,11 +101,21 @@ impl SimRenderer {
         buffer.set_size(font_system, Some(size.x * scale), Some(size.y * scale));
     }
 
+    #[allow(clippy::too_many_lines)]
     fn draw(&mut self) -> Result<(), DrawError> {
         let device = &self.wgpu.device;
         let queue = &self.wgpu.queue;
 
-        let surface_tex = self.wgpu.surface.get_current_texture()?;
+        let surface_tex = match self.wgpu.surface.get_current_texture() {
+            CurrentSurfaceTexture::Success(tex) => tex,
+            CurrentSurfaceTexture::Suboptimal(tex) => {
+                self.wgpu
+                    .surface
+                    .configure(&self.wgpu.device, &self.wgpu.config);
+                tex
+            }
+            _ => panic!(),
+        };
 
         let surface_view = surface_tex
             .texture
@@ -127,7 +135,7 @@ impl SimRenderer {
         let msaa_view = msaa_tex.create_view(&wgpu::TextureViewDescriptor::default());
 
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("circle command encoder"),
+            label: Some("physics/encoder"),
         });
 
         let framesteps = self.game.gfx.steps_per_frame;
@@ -169,6 +177,7 @@ impl SimRenderer {
                 depth_stencil_attachment: None,
                 occlusion_query_set: None,
                 timestamp_writes: None,
+                multiview_mask: None,
             });
 
             pass.set_pipeline(&self.shader.pipeline);
@@ -215,19 +224,15 @@ impl SimRenderer {
         queue.submit(Some(encoder.finish()));
         surface_tex.present();
 
-        cfg_if! {
-            if #[cfg(not(target_arch = "wasm32"))] {
-                for buf in readback_buffers {
-                    let Some(buf) = buf else { continue };
-                    let p = Arc::clone(&self.perf.perf);
-                    self.compute.pipelines.profile(queue, buf, move |profile| {
-                        *p.lock().unwrap() = profile;
-                    });
-                }
-
-                device.poll(wgpu::PollType::Poll).unwrap();
-            }
+        for buf in readback_buffers {
+            let Some(buf) = buf else { continue };
+            let p = Arc::clone(&self.perf.perf);
+            self.compute.pipelines.profile(queue, buf, move |profile| {
+                *p.lock().unwrap() = profile;
+            });
         }
+
+        device.poll(wgpu::PollType::Poll).unwrap();
 
         Ok(())
     }
@@ -272,13 +277,13 @@ impl ApplicationHandler for SimRenderer {
                 self.compute.user.mouse = state;
                 self.compute.update.mouse = true;
             }
-            _ => {}
+            InputResponse::None => {}
         }
 
         match &event {
             WindowEvent::CloseRequested => {
                 info!("Got close request, quitting!");
-                event_loop.exit()
+                event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
                 if let Err(e) = self.draw() {
@@ -304,25 +309,7 @@ impl ApplicationHandler for SimRenderer {
 
             win.set_fullscreen(Some(Fullscreen::Borderless(None)));
 
-            cfg_if! {
-                if #[cfg(target_arch = "wasm32")] {
-                    // safety: SimRenderer was Box::leaked
-                    // just a little bit of jank
-                    // wasm async lifetimes are cursed
-
-                    let ptr = self as *mut _;
-                    let num = ptr as usize;
-
-                    wasm_bindgen_futures::spawn_local(async move {
-                        let ptr = num as *mut Self;
-                        let this = unsafe { &mut *ptr };
-
-                        this.init(win).await.unwrap();
-                    })
-                } else {
-                    pollster::block_on(self.init(win))?;
-                }
-            }
+            pollster::block_on(self.init(win))?;
 
             Ok::<_, ResumeError>(())
         })()

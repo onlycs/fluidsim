@@ -1,7 +1,0 @@
-[package]
-name = "fluidsim-desktop"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies.fluidsim]
-workspace = true

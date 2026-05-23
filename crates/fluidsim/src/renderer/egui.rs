@@ -3,7 +3,7 @@ use std::ops::{Deref, DerefMut};
 use super::wgpu_state::WgpuData;
 
 use egui::{Context, Shadow};
-use egui_wgpu::{Renderer, ScreenDescriptor};
+use egui_wgpu::{Renderer, RendererOptions, ScreenDescriptor};
 use egui_winit::{EventResponse, State};
 use wgpu::{CommandEncoder, TextureView};
 use winit::{event::WindowEvent, window::Window};
@@ -25,7 +25,7 @@ impl EguiTranslator {
         });
 
         let state = State::new(ctx.clone(), id, &wgpu.window, None, None, None);
-        let renderer = Renderer::new(&wgpu.device, wgpu.config.format, None, 1, false);
+        let renderer = Renderer::new(&wgpu.device, wgpu.config.format, RendererOptions::default());
 
         Self {
             context: ctx,
@@ -43,12 +43,12 @@ impl EguiTranslator {
         wgpu: &WgpuData,
         encoder: &mut CommandEncoder,
         surface_view: &TextureView,
-        ui: impl FnMut(&Context),
+        ui: impl FnMut(&mut egui::Ui),
     ) {
         self.context.set_pixels_per_point(1.0);
 
         let input = self.state.take_egui_input(&wgpu.window);
-        let output = self.context.run(input, ui);
+        let output = self.context.run_ui(input, ui);
 
         self.state
             .handle_platform_output(&wgpu.window, output.platform_output);
@@ -84,13 +84,14 @@ impl EguiTranslator {
             depth_stencil_attachment: None,
             timestamp_writes: None,
             occlusion_query_set: None,
+            multiview_mask: None,
         });
 
         self.renderer
             .render(&mut rpass.forget_lifetime(), &clips, &desc);
 
         for x in &output.textures_delta.free {
-            self.renderer.free_texture(x)
+            self.renderer.free_texture(x);
         }
     }
 }

@@ -16,7 +16,7 @@ impl<A> BufferBinding<A> {
         &'a A: AsRef<[K]>,
         K: NoUninit,
     {
-        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(data.as_ref()))
+        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(data.as_ref()));
     }
 }
 
@@ -45,7 +45,7 @@ macro_rules! buffers {
                     Self {$(
                         $bid: BufferBinding {
                             buffer: Arc::new(device.create_buffer(&wgpu::BufferDescriptor {
-                                label: Some(concat!("physics::", stringify!($gid), "::", stringify!($bid), "$buffer")),
+                                label: Some(concat!("physics/bindgroup:", stringify!($gid), "/buffer:", stringify!($bid))),
                                 size: ::std::mem::size_of::<$($bty)+>() as u64,
                                 usage: buffers!(@usage $type) | $(wgpu::BufferUsages::$usage)|+,
                                 mapped_at_creation: false,
@@ -63,28 +63,24 @@ macro_rules! buffers {
         )+
 
         pub struct Sort {
-            pub lookup: BufferBinding<[u32; ::gpu_shared::ARRAY_LEN]>,
             pub keys: BufferBinding<[u32; ::gpu_shared::ARRAY_LEN]>,
-            pub sort_buffers: ::wgpu_sort::SortBuffers,
+            pub lookup: BufferBinding<[u32; ::gpu_shared::ARRAY_LEN]>,
         }
 
         impl Sort {
-            pub fn new(buffers: ::wgpu_sort::SortBuffers) -> Self {
-                let lookup = buffers.values();
-                let keys = buffers.keys();
-
+            pub fn new(keys: &wgpu::Buffer, values: &wgpu::Buffer) -> Self {
                 Self {
                     lookup: BufferBinding {
-                        buffer: Arc::new(lookup.clone()),
+                        buffer: Arc::new(keys.clone()),
                         binding: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: false },
                             has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(lookup.size()),
+                            min_binding_size: wgpu::BufferSize::new(values.size()),
                         },
                         _phantom: ::std::marker::PhantomData,
                     },
                     keys: BufferBinding {
-                        buffer: Arc::new(keys.clone()),
+                        buffer: Arc::new(values.clone()),
                         binding: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: false },
                             has_dynamic_offset: false,
@@ -92,28 +88,25 @@ macro_rules! buffers {
                         },
                         _phantom: ::std::marker::PhantomData,
                     },
-                    sort_buffers: buffers,
                 }
             }
         }
 
-        #[cfg(not(target_arch = "wasm32"))]
         pub struct Profiler {
             pub query_set: wgpu::QuerySet,
             pub query_buffer: Arc<wgpu::Buffer>,
         }
 
-        #[cfg(not(target_arch = "wasm32"))]
         impl Profiler {
             fn new(device: &wgpu::Device) -> Self {
                 let query_set = device.create_query_set(&wgpu::QuerySetDescriptor {
-                    label: Some("physics::profiler$query_set"),
+                    label: Some("physics/profiler/query_set"),
                     ty: wgpu::QueryType::Timestamp,
                     count: 2 * super::pipelines::PIPELINES as u32,
                 });
 
                 let query_buffer = Arc::new(device.create_buffer(&wgpu::BufferDescriptor {
-                    label: Some("physics::profiler$query_buffer"),
+                    label: Some("physics/profiler/query_buffer"),
                     size: 2 * super::pipelines::PIPELINES as u64 * ::std::mem::size_of::<u64>() as u64,
                     usage: wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::QUERY_RESOLVE,
                     mapped_at_creation: false,
@@ -129,16 +122,14 @@ macro_rules! buffers {
         pub struct Buffers {
             $(pub $gid: $gty,)+
             pub sort: Sort,
-            #[cfg(not(target_arch = "wasm32"))]
             pub profiler: Profiler,
         }
 
         impl Buffers {
-            pub fn new(device: &wgpu::Device, sort: Sort) -> Self {
+            pub fn new(device: &wgpu::Device, sorter: &wgpu_sort::Sorter) -> Self {
                 Self {
                     $($gid: $gty::buffers(&device),)+
-                    sort,
-                    #[cfg(not(target_arch = "wasm32"))]
+                    sort: Sort::new(sorter.buffer_keys(), sorter.buffer_values()),
                     profiler: Profiler::new(device),
                 }
             }

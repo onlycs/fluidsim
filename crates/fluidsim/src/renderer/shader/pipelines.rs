@@ -20,47 +20,27 @@ macro_rules! pipelines {
     (@dispatcher $v:ident $i:expr;) => ({});
 
     (@dispatcher $v:ident $i:expr; pre_sort $($entries:ident)*) => {
-        ::cfg_if::cfg_if! {
-            if #[cfg(not(target_arch = "wasm32"))] {
-                $v.push((|s, e, _q, b, d, n| {
-                    e.write_timestamp(&b.profiler.query_set, $i);
-                    s.pre_sort.dispatch(e, d, n);
-                    e.write_timestamp(&b.profiler.query_set, $i + 1);
-                }) as Dispatcher);
+        $v.push((|s, e, _q, b, d, n| {
+            e.write_timestamp(&b.profiler.query_set, $i);
+            s.pre_sort.dispatch(e, d, n);
+            e.write_timestamp(&b.profiler.query_set, $i + 1);
+        }) as Dispatcher);
 
-                $v.push((|s, e, q, b, _d, n| {
-                    e.write_timestamp(&b.profiler.query_set, $i + 2);
-                    s.sorter.sort(e, q, &b.sort.sort_buffers, Some(n));
-                    e.write_timestamp(&b.profiler.query_set, $i + 3);
-                }) as Dispatcher);
-            } else {
-                $v.push((|s, e, _q, _b, d, n| {
-                    s.pre_sort.dispatch(e, d, n);
-                }) as Dispatcher);
-
-                $v.push((|s, e, q, b, _d, n| {
-                    s.sorter.sort(e, q, &b.sort.sort_buffers, Some(n));
-                }) as Dispatcher);
-            }
-        }
+        $v.push((|s, e, q, b, _d, n| {
+            e.write_timestamp(&b.profiler.query_set, $i + 2);
+            s.sorter.sort(e, q, n);
+            e.write_timestamp(&b.profiler.query_set, $i + 3);
+        }) as Dispatcher);
 
         pipelines!(@dispatcher $v $i + 4; $($entries)*);
     };
 
     (@dispatcher $v:ident $i:expr; $entry:ident $($entries:ident)*) => {
-        ::cfg_if::cfg_if! {
-            if #[cfg(not(target_arch = "wasm32"))] {
-                $v.push((|s, e, _q, b, d, n| {
-                    e.write_timestamp(&b.profiler.query_set, $i);
-                    s.$entry.dispatch(e, d, n);
-                    e.write_timestamp(&b.profiler.query_set, $i + 1);
-                }) as Dispatcher);
-            } else {
-                $v.push((|s, e, _q, _b, d, n| {
-                    s.$entry.dispatch(e, d, n);
-                }) as Dispatcher);
-            }
-        }
+        $v.push((|s, e, _q, b, d, n| {
+            e.write_timestamp(&b.profiler.query_set, $i);
+            s.$entry.dispatch(e, d, n);
+            e.write_timestamp(&b.profiler.query_set, $i + 1);
+        }) as Dispatcher);
 
         pipelines!(@dispatcher $v $i + 2; $($entries)*);
     };
@@ -126,7 +106,7 @@ macro_rules! pipelines {
                         idx = 0;
 
                         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                            label: Some(concat!("physics::", stringify!($entry), "$pipeline_layout::", stringify!($group), "$bgl")),
+                            label: Some(concat!("physics/pipeline_layout:", stringify!($entry), "/bindgroup_layout:", stringify!($group))),
                             entries: &[$({
                                 idx += 1;
 
@@ -166,7 +146,7 @@ macro_rules! pipelines {
                         i += 1;
 
                         device.create_bind_group(&wgpu::BindGroupDescriptor {
-                            label: Some(concat!("physics::", stringify!($entry), "$pipeline::", stringify!($group), "$bind_group")),
+                            label: Some(concat!("physics/pipeline:", stringify!($entry), "/bindgroup:", stringify!($group))),
                             layout: &layouts[i - 1],
                             entries: &entries
                         })
@@ -177,9 +157,9 @@ macro_rules! pipelines {
                     const _GROUPS: usize = $cty::GROUPS;
 
                     device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                        label: Some(concat!("physics::", stringify!($entry), "$pipeline_layout")),
-                        bind_group_layouts: &::std::array::from_fn::<_, _GROUPS, _>(|i| &layouts[i]),
-                        push_constant_ranges: &[]
+                        label: Some(concat!("physics/pipeline_layout:", stringify!($entry))),
+                        bind_group_layouts: &::std::array::from_fn::<_, _GROUPS, _>(|i| Some(&layouts[i])),
+                        immediate_size: 0
                     })
                 }
 
@@ -189,7 +169,7 @@ macro_rules! pipelines {
                     shader: &wgpu::ShaderModule
                 ) -> wgpu::ComputePipeline {
                     device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                        label: Some(concat!("physics::", stringify!($entry), "$pipeline")),
+                        label: Some(concat!("physics/pipeline:", stringify!($entry))),
                         layout: Some(layout),
                         module: shader,
                         entry_point: Some(stringify!($entry)),
@@ -238,7 +218,7 @@ macro_rules! pipelines {
 
         pub struct Pipelines {
             $(pub $entry: $cty,)+
-            pub sorter: ::wgpu_sort::GPUSorter,
+            pub sorter: ::wgpu_sort::Sorter,
         }
 
         impl Pipelines {
@@ -246,7 +226,7 @@ macro_rules! pipelines {
                 device: &wgpu::Device,
                 buffers: &Buffers,
                 shader: &wgpu::ShaderModule,
-                sorter: ::wgpu_sort::GPUSorter,
+                sorter: ::wgpu_sort::Sorter,
             ) -> Self {
                 Self {
                     $($entry: $cty::new(device, buffers, shader),)+
@@ -263,7 +243,6 @@ macro_rules! pipelines {
                 dispatchers.into_iter()
             }
 
-            #[cfg(not(target_arch = "wasm32"))]
             pub fn dispatch_all(
                 &self,
                 device: &wgpu::Device,
@@ -278,7 +257,7 @@ macro_rules! pipelines {
                 }
 
                 let readback_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-                    label: Some("profiler$readback_staging_buffer"),
+                    label: Some("physics/profiler/readback_buffer"),
                     size: buffers.profiler.query_buffer.size(),
                     usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
                     mapped_at_creation: false,
@@ -302,22 +281,6 @@ macro_rules! pipelines {
                 readback_buffer
             }
 
-            #[cfg(target_arch = "wasm32")]
-            pub fn dispatch_all(
-                &self,
-                device: &wgpu::Device,
-                encoder: &mut wgpu::CommandEncoder,
-                queue: &wgpu::Queue,
-                buffers: &Buffers,
-                descriptor: &wgpu::ComputePassDescriptor<'_>,
-                num_particles: u32,
-            ) {
-                for dispatch in Self::iter() {
-                    dispatch(self, encoder, queue, buffers, descriptor, num_particles);
-                }
-            }
-
-            #[cfg(not(target_arch = "wasm32"))]
             pub fn profile(&self, queue: &wgpu::Queue, readback_buffer: wgpu::Buffer, set_profiler: impl FnOnce(ComputeShaderPerformance) + Send + Sync + 'static) {
                 let period = queue.get_timestamp_period(); // ns/tick
 

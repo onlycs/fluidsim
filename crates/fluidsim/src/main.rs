@@ -1,0 +1,39 @@
+#![feature(error_generic_member_access, trivial_bounds)]
+#![warn(clippy::pedantic)]
+#![allow(
+    clippy::similar_names,
+    clippy::missing_errors_doc,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::result_large_err,
+    clippy::wildcard_imports
+)]
+
+#[macro_use]
+extern crate tracing;
+
+mod config;
+mod error;
+mod logger;
+mod prelude;
+mod renderer;
+
+use error::InitError;
+use renderer::SimRenderer;
+use winit::event_loop::EventLoop;
+
+fn main() -> Result<(), InitError> {
+    logger::init();
+
+    info!("Starting up");
+
+    let event_loop = EventLoop::builder().build()?;
+    let app = Box::leak(Box::new(SimRenderer::new()));
+
+    event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
+    event_loop.run_app(app)?;
+
+    Ok(())
+}

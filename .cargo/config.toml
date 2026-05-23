@@ -15,6 +15,3 @@ codegen-backend = true
 
 [profile.dev]
 codegen-backend = "cranelift"
-
-[target.wasm32-unknown-unknown]
-rustflags=['--cfg', 'getrandom_backend="wasm_js"']

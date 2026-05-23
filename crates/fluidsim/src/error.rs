@@ -104,7 +104,7 @@ pub enum DrawError {
     #[error("At {location}: wgpu: surface error:\n{source}")]
     Surface {
         #[from]
-        source: wgpu::SurfaceError,
+        source: wgpu::Error,
         location: &'static Location<'static>,
         backtrace: Backtrace,
     },

@@ -3,8 +3,9 @@ members = ["crates/*"]
 resolver = "2"
 
 [workspace.dependencies]
-fluidsim = { path = "crates/fluidsim" }
+glam = { version = "=0.31.0", features = ["bytemuck"] }
 gpu-shared = { path = "crates/gpu-shared" }
+spirv-std = { git = "https://github.com/rust-gpu/rust-gpu" }
 
 [profile.dev.build-override]
 opt-level = 3

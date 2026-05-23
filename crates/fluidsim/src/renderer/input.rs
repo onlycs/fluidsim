@@ -1,4 +1,5 @@
-use egui::ahash::HashSet;
+use std::collections::HashSet;
+
 use winit::{
     event::{Modifiers, MouseButton, WindowEvent},
     keyboard::{KeyCode, PhysicalKey},

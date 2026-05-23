@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 gpu-shared.workspace = true
-spirv-std = { git = "https://github.com/rust-gpu/rust-gpu" }
+spirv-std.workspace = true
 
 [lib]
 crate-type = ["dylib"]

@@ -1,21 +1,26 @@
-use log::LevelFilter;
-use simple_logger::SimpleLogger;
+use tracing::Level;
+use tracing_subscriber::{filter::Targets, layer::SubscriberExt, util::SubscriberInitExt};
 
 #[cfg(debug_assertions)]
-const LOG_LEVEL: LevelFilter = LevelFilter::Debug;
+const LOG_LEVEL: Level = Level::DEBUG;
 #[cfg(not(debug_assertions))]
-const LOG_LEVEL: LevelFilter = LevelFilter::Info;
+const LOG_LEVEL: Level = Level::INFO;
 
 pub fn init() {
-    SimpleLogger::new()
-        .with_level(LevelFilter::Info)
-        .with_module_level("fluidsim", LOG_LEVEL)
-        .with_module_level("wgpu_hal", LevelFilter::Info)
-        .with_module_level("wgpu_core", LevelFilter::Info)
-        .with_module_level("eframe", LevelFilter::Warn)
-        .with_module_level("egui_wgpu", LevelFilter::Warn)
-        .with_module_level("wgpu_hal::gles::egl", LevelFilter::Error)
-        .with_module_level("naga::front::spv", LevelFilter::Error)
-        .init()
-        .unwrap();
+    #[cfg(debug_assertions)]
+    let fmt = tracing_subscriber::fmt::layer().pretty();
+    #[cfg(not(debug_assertions))]
+    let fmt = tracing_subscriber::fmt::layer().compact();
+
+    let filter = Targets::new()
+        .with_default(LOG_LEVEL)
+        .with_target("fluidsim", LOG_LEVEL)
+        .with_target("wgpu_hal", Level::INFO)
+        .with_target("wgpu_core", Level::INFO)
+        .with_target("eframe", Level::WARN)
+        .with_target("egui_wgpu", Level::WARN)
+        .with_target("wgpu_hal::gles::egl", Level::ERROR)
+        .with_target("naga::front", Level::WARN);
+
+    tracing_subscriber::registry().with(filter).with(fmt).init();
 }

@@ -1,18 +1,17 @@
-use spirv_builder::{MetadataPrintout, SpirvBuilder};
+use spirv_builder::{SpirvBuilder, SpirvMetadata};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../physics");
+    let spirv_crate = concat!(env!("CARGO_MANIFEST_DIR"), "/../physics");
 
-    println!(
-        "cargo:rerun-if-changed={}/**/*",
-        dir
-    );
+    println!("cargo:rerun-if-changed={}/**/*", spirv_crate);
     println!("cargo:rerun-if-changed=build.rs");
-    print!("");
 
-    SpirvBuilder::new(dir, "spirv-unknown-vulkan1.2")
-        .print_metadata(MetadataPrintout::Full)
-        .build()?;
+    let mut b = SpirvBuilder::new(spirv_crate, "spirv-unknown-vulkan1.4")
+        .spirv_metadata(SpirvMetadata::Full);
+
+    b.build_script.defaults = true;
+    b.build_script.env_shader_spv_path = Some(true);
+    b.build()?;
 
     Ok(())
 }

@@ -1,12 +1,14 @@
 use std::ops::{Deref, DerefMut};
-use wgpu_sort::GPUSorter;
+
+use wgpu_sort::Sorter;
 
 use super::buffers::*;
 use crate::prelude::*;
 use crate::renderer::shader::pipelines::Pipelines;
 use crate::renderer::wgpu_state::WgpuData;
 
-const MAX_ARRAY: [u32; ARRAY_LEN] = [u32::MAX; ARRAY_LEN];
+static MAX_ARRAY: [u32; ARRAY_LEN] = [u32::MAX; ARRAY_LEN];
+static EMPTY_VEC2: [[f32; 2]; ARRAY_LEN] = [[0.; 2]; ARRAY_LEN];
 
 #[derive(Default)]
 pub struct UserData {
@@ -43,13 +45,10 @@ impl ComputeData {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
         let shader = device.create_shader_module(super::SHADER.clone());
 
-        let sorter = GPUSorter::new(device, 64);
-        let len = NonZeroU32::new(ARRAY_LEN as u32).unwrap();
-        let sort_buffers = sorter.create_sort_buffers(device, len);
+        let sorter = Sorter::new(device, ARRAY_LEN as u32);
 
         let usr = UserData::default();
-        let sort = Sort::new(sort_buffers);
-        let buffers = Buffers::new(device, sort);
+        let buffers = Buffers::new(device, &sorter);
         let pipelines = Pipelines::new(device, &buffers, &shader, sorter);
 
         // initialize some nonzero buffers
@@ -58,14 +57,14 @@ impl ComputeData {
         buffers.sort.keys.reset(queue, &MAX_ARRAY);
 
         let pass_descriptor = wgpu::ComputePassDescriptor {
-            label: Some("physics$pass"),
+            label: Some("physics/computepass"),
             timestamp_writes: None,
         };
 
         Self {
             user: usr,
             buffers,
-            update: Default::default(),
+            update: UpdateState::default(),
             pipelines,
             pass_desc: pass_descriptor,
         }
@@ -88,8 +87,9 @@ impl ComputeData {
                 (size * ny) + (gap * (ny - 1.)) - self.user.settings.particle_radius,
             );
 
-        // clear all
-        let mut positions = Box::new([[0.0; 2]; ARRAY_LEN]);
+        // SAFETY: this would be zeroes anyways
+        // why? must create directly in the heap. vec![...].into_boxed_slice() doesn't preserve length
+        let mut positions = unsafe { Box::<[[f32; 2]; ARRAY_LEN]>::new_zeroed().assume_init() };
         self.user.settings.num_particles = nx as u32 * ny as u32;
 
         // create the particles
@@ -129,7 +129,6 @@ impl ComputeData {
 
         if self.update.reset {
             let new_pos = self.reset(conditions);
-            const EMPTY_VEC2: [[f32; 2]; ARRAY_LEN] = [[0f32; 2]; ARRAY_LEN];
 
             self.buffers.physics.positions.reset(queue, &new_pos);
             self.buffers.physics.predictions.reset(queue, &EMPTY_VEC2);
@@ -158,29 +157,14 @@ impl ComputeData {
             self.update.mouse = false;
         }
 
-        cfg_if::cfg_if! {
-            if #[cfg(not(target_arch = "wasm32"))] {
-                return Some(self.pipelines.dispatch_all(
-                    device,
-                    encoder,
-                    queue,
-                    &self.buffers,
-                    &self.pass_desc,
-                    self.user.settings.num_particles,
-                ));
-            } else {
-                self.pipelines.dispatch_all(
-                    device,
-                    encoder,
-                    queue,
-                    &self.buffers,
-                    &self.pass_desc,
-                    self.user.settings.num_particles,
-                );
-
-                None
-            }
-        }
+        Some(self.pipelines.dispatch_all(
+            device,
+            encoder,
+            queue,
+            &self.buffers,
+            &self.pass_desc,
+            self.user.settings.num_particles,
+        ))
     }
 }
 

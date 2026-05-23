@@ -111,10 +111,11 @@ impl VsState {
         self.0.is_none()
     }
 
+    #[allow(clippy::too_many_lines)]
     pub fn init(
         &mut self,
         wgpu: &WgpuData,
-        prims_buf: Arc<wgpu::Buffer>,
+        prims_buf: &wgpu::Buffer,
     ) -> Result<(), TessellationError> {
         let mut tessellation_buf: VertexBuffers<_, u16> = VertexBuffers::new();
         let mut tessellator = FillTessellator::new();
@@ -151,7 +152,7 @@ impl VsState {
         let vs = device.create_shader_module(super::SHADER.clone());
 
         let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            label: Some("vs$layout"),
+            label: Some("physics/vertex/bindgroup_layout"),
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
@@ -177,7 +178,7 @@ impl VsState {
         });
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("vs$group"),
+            label: Some("physics/vertex/bindgroup"),
             layout: &bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
@@ -192,9 +193,9 @@ impl VsState {
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            bind_group_layouts: &[&bind_group_layout],
-            push_constant_ranges: &[],
-            label: Some("vs$pipeline_layout"),
+            bind_group_layouts: &[Some(&bind_group_layout)],
+            label: Some("physics/vertex/pipeline_layout"),
+            immediate_size: 0,
         });
 
         let fs_targets = [Some(wgpu::ColorTargetState {
@@ -204,7 +205,7 @@ impl VsState {
         })];
 
         let pipeline_desc = wgpu::RenderPipelineDescriptor {
-            label: Some("vs$pipeline"),
+            label: Some("physics/vertex/pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &vs,
@@ -237,7 +238,7 @@ impl VsState {
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         };
 

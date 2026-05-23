@@ -1,10 +1,11 @@
 use std::sync::atomic::{self, AtomicBool};
 
 use crate::prelude::*;
-use egui::{Button, Context, RichText, Slider};
+use egui::{Button, RichText, Slider};
 
 const TEXT_SIZE: f32 = 16.0;
 
+#[allow(clippy::struct_field_names)]
 pub struct Panel {
     show_self: bool,
     show_help: bool,
@@ -32,25 +33,25 @@ impl Panel {
         Arc::clone(&self.show_perf)
     }
 
-    /// Returns a function that should be used once to update the panel and synchronize updated settings
+    #[allow(clippy::too_many_lines)]
     pub fn update<'a>(
         &'a self,
         sim: &'a mut SimSettings,
         gfx: &'a mut GraphicsSettings,
         init: &'a mut InitialConditions,
         update: UpdateData<'a>,
-    ) -> impl FnMut(&Context) + 'a {
+    ) -> impl FnMut(&mut egui::Ui) + 'a {
         let UpdateData {
             reset,
             retessellate,
         } = update;
 
-        |ctx: &Context| {
+        |ui: &mut egui::Ui| {
             if !self.show_self {
                 return;
             }
 
-            egui::Window::new("Simulation Settings").show(ctx, |ui| {
+            egui::Window::new("Simulation Settings").show(ui.ctx(), |ui| {
                 ui.label(RichText::new("Graphics Settings").size(TEXT_SIZE).strong());
 
                 ui.add(Slider::new(&mut gfx.speed, 0.5..=2.0).text("Speed (multiplier)"))
