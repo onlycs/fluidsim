@@ -1,7 +1,8 @@
 use std::sync::atomic::{self, AtomicBool};
 
-use crate::prelude::*;
 use egui::{Button, RichText, Slider};
+
+use crate::prelude::*;
 
 const TEXT_SIZE: f32 = 16.0;
 

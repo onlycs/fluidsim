@@ -1,11 +1,7 @@
-use std::ops::{Deref, DerefMut};
-
 use wgpu_sort::Sorter;
 
-use super::buffers::*;
+use super::{buffers::*, pipelines::Pipelines};
 use crate::prelude::*;
-use crate::renderer::shader::pipelines::Pipelines;
-use crate::renderer::wgpu_state::WgpuData;
 
 static MAX_ARRAY: [u32; ARRAY_LEN] = [u32::MAX; ARRAY_LEN];
 static EMPTY_VEC2: [[f32; 2]; ARRAY_LEN] = [[0.; 2]; ARRAY_LEN];
@@ -30,7 +26,7 @@ impl Default for UpdateState {
     }
 }
 
-pub struct ComputeData {
+pub struct ComputeShaderContext {
     pub user: UserData,
 
     pub buffers: Buffers,
@@ -41,7 +37,7 @@ pub struct ComputeData {
 }
 
 // creation and updating scene settings, etc
-impl ComputeData {
+impl ComputeShaderContext {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
         let shader = device.create_shader_module(super::SHADER.clone());
 
@@ -88,7 +84,8 @@ impl ComputeData {
             );
 
         // SAFETY: this would be zeroes anyways
-        // why? must create directly in the heap. vec![...].into_boxed_slice() doesn't preserve length
+        // why? must create directly in the heap. vec![...].into_boxed_slice() doesn't
+        // preserve length
         let mut positions = unsafe { Box::<[[f32; 2]; ARRAY_LEN]>::new_zeroed().assume_init() };
         self.user.settings.num_particles = nx as u32 * ny as u32;
 
@@ -101,7 +98,8 @@ impl ComputeData {
                     size * j as f32 + gap * j as f32,
                 );
 
-                // add a small random offset to the position because this engine is deterministic
+                // add a small random offset to the position because this engine is
+                // deterministic
                 let random = Vec2::new(0.5 - rand::random::<f32>(), 0.5 - rand::random::<f32>());
                 let pos = topleft + offset + random / 25.;
 
@@ -165,32 +163,5 @@ impl ComputeData {
             &self.pass_desc,
             self.user.settings.num_particles,
         ))
-    }
-}
-
-#[derive(Default)]
-pub struct ComputeState(Option<ComputeData>);
-
-impl ComputeState {
-    pub fn uninit(&self) -> bool {
-        self.0.is_none()
-    }
-
-    pub fn init(&mut self, wgpu: &WgpuData) {
-        self.0 = Some(ComputeData::new(&wgpu.device, &wgpu.queue));
-    }
-}
-
-impl Deref for ComputeState {
-    type Target = ComputeData;
-
-    fn deref(&self) -> &Self::Target {
-        self.0.as_ref().unwrap()
-    }
-}
-
-impl DerefMut for ComputeState {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.0.as_mut().unwrap()
     }
 }

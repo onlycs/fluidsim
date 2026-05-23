@@ -1,6 +1,8 @@
 use gpu_shared::ARRAY_LEN;
-use spirv_std::glam::{IVec2, Vec2, ivec2};
-use spirv_std::num_traits::real::Real;
+use spirv_std::{
+    glam::{IVec2, Vec2, ivec2},
+    num_traits::real::Real,
+};
 
 pub const NEIGHBORS: [IVec2; 9] = [
     ivec2(-1, -1),
@@ -46,8 +48,9 @@ pub fn pos_to_key(pos: Vec2, cell_size: f32, num_particles: u32) -> u32 {
     cell_key(pos_to_cell(pos, cell_size), num_particles)
 }
 
-/// Get the range of particles for a given key (old approach - kept for compatibility)
-/// Note: This is slower than the new while-loop approach in the shaders
+/// Get the range of particles for a given key (old approach - kept for
+/// compatibility) Note: This is slower than the new while-loop approach in the
+/// shaders
 pub fn get_by_key(key: u32, starts: &[u32; ARRAY_LEN], num_particles: u32) -> (u32, u32) {
     if key >= num_particles {
         return (0, 0);

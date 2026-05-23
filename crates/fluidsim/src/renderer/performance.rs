@@ -1,19 +1,15 @@
-use std::{
-    ops::{Deref, DerefMut},
-    sync::{
-        Mutex,
-        atomic::{self, AtomicBool},
-    },
+use std::sync::{
+    Mutex,
+    atomic::{self, AtomicBool},
 };
 
-use super::shader::pipelines::ComputeShaderPerformance;
 use glyphon::{
     Attrs, Buffer, Cache, Color, FontSystem, Metrics, Resolution, SwashCache, TextArea, TextAtlas,
     TextBounds, TextRenderer, Viewport, Weight,
 };
 use wgpu::{CommandEncoder, MultisampleState, TextureView};
 
-use super::wgpu_state::WgpuData;
+use super::{graphics::GraphicsContext, shader::pipelines::ComputeShaderPerformance};
 use crate::prelude::*;
 
 const FONT_SIZE: f32 = 18.;
@@ -37,7 +33,7 @@ pub struct PerformanceDisplay {
 }
 
 impl PerformanceDisplay {
-    pub fn new(wgpu: &WgpuData, enabled: Arc<AtomicBool>) -> Self {
+    pub fn new(wgpu: &GraphicsContext, enabled: Arc<AtomicBool>) -> Self {
         let size = wgpu.window.inner_size();
         let scale = wgpu.window.scale_factor() as f32;
 
@@ -100,7 +96,7 @@ impl PerformanceDisplay {
 
     pub fn render(
         &mut self,
-        wgpu: &WgpuData,
+        wgpu: &GraphicsContext,
         encoder: &mut CommandEncoder,
         view: &TextureView,
     ) -> Result<(), TextError> {
@@ -114,7 +110,7 @@ impl PerformanceDisplay {
             ..
         } = self;
 
-        let WgpuData {
+        let GraphicsContext {
             device,
             queue,
             config,
@@ -195,32 +191,5 @@ impl PerformanceDisplay {
         atlas.trim();
 
         Ok(())
-    }
-}
-
-#[derive(Default)]
-pub struct PerfDisplayState(Option<PerformanceDisplay>);
-
-impl PerfDisplayState {
-    pub fn uninit(&self) -> bool {
-        self.0.is_none()
-    }
-
-    pub fn init(&mut self, wgpu: &WgpuData, enabled: Arc<AtomicBool>) {
-        self.0 = Some(PerformanceDisplay::new(wgpu, enabled));
-    }
-}
-
-impl Deref for PerfDisplayState {
-    type Target = PerformanceDisplay;
-
-    fn deref(&self) -> &Self::Target {
-        self.0.as_ref().unwrap()
-    }
-}
-
-impl DerefMut for PerfDisplayState {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.0.as_mut().unwrap()
     }
 }

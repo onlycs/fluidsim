@@ -1,10 +1,9 @@
-use crate::prelude::*;
-
-use std::ops::{Deref, DerefMut};
 use wgpu::PowerPreference;
 use winit::{dpi::PhysicalSize, window::Window};
 
-pub struct WgpuData {
+use crate::prelude::*;
+
+pub struct GraphicsContext {
     pub surface: wgpu::Surface<'static>,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -12,15 +11,8 @@ pub struct WgpuData {
     pub config: wgpu::SurfaceConfiguration,
 }
 
-#[derive(Default)]
-pub struct WgpuState(Option<WgpuData>);
-
-impl WgpuState {
-    pub fn uninit(&self) -> bool {
-        self.0.is_none()
-    }
-
-    pub async fn init(&mut self, window: Window, window_size: Vec2) -> Result<(), RendererError> {
+impl GraphicsContext {
+    pub async fn new(window: Window, window_size: Vec2) -> Result<Self, RendererError> {
         info!("Initializing renderer");
 
         let instance =
@@ -78,29 +70,12 @@ impl WgpuState {
 
         surface.configure(&device, &surface_cfg);
 
-        self.0 = Some(WgpuData {
+        Ok(GraphicsContext {
             surface,
             device,
             queue,
             config: surface_cfg,
             window,
-        });
-
-        Ok(())
-    }
-}
-
-impl Deref for WgpuState {
-    type Target = WgpuData;
-
-    #[track_caller]
-    fn deref(&self) -> &Self::Target {
-        unsafe { self.0.as_ref().unwrap_unchecked() }
-    }
-}
-
-impl DerefMut for WgpuState {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { self.0.as_mut().unwrap_unchecked() }
+        })
     }
 }

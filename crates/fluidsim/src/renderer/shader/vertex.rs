@@ -1,7 +1,3 @@
-use std::ops::{Deref, DerefMut};
-
-use crate::prelude::*;
-use crate::renderer::wgpu_state::WgpuData;
 use lyon::{
     geom::Point,
     tessellation::{
@@ -10,6 +6,8 @@ use lyon::{
     },
 };
 use wgpu::{BindGroupLayoutDescriptor, util::DeviceExt};
+
+use crate::{prelude::*, renderer::graphics::GraphicsContext};
 
 pub type VsGlobals = gpu_shared::Globals;
 pub type VsCirclePrimitive = gpu_shared::Primitive;
@@ -50,73 +48,26 @@ impl StrokeVertexConstructor<VsInput> for WithId {
     }
 }
 
-pub struct VsData {
+pub struct VertexShaderContext {
     pub globals: VsGlobals,
 
     pub globals_buf: wgpu::Buffer,
-
     pub index_buf: wgpu::Buffer,
     pub vertex_buf: wgpu::Buffer,
     pub tessellation_buf: VertexBuffers<VsInput, u16>,
 
     pub bind_group: wgpu::BindGroup,
-
     pub pipeline: wgpu::RenderPipeline,
 
     pub retessellate: bool,
 }
 
-impl VsData {
-    pub fn update(&mut self, wgpu: &WgpuData, settings: SimSettings) -> Result<(), DrawError> {
-        if self.retessellate {
-            let device = &wgpu.device;
-
-            let mut tessellation_buf = VertexBuffers::new();
-            let mut tessellator = FillTessellator::new();
-
-            tessellator.tessellate_circle(
-                Point::new(0., 0.),
-                settings.particle_radius * PX_PER_UNIT,
-                &FillOptions::default(),
-                &mut BuffersBuilder::new(&mut tessellation_buf, WithId(0)),
-            )?;
-
-            let init_ibuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("index buffer init"),
-                contents: bytemuck::cast_slice(&tessellation_buf.indices),
-                usage: wgpu::BufferUsages::INDEX,
-            });
-
-            let init_vbuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("vertex buffer init"),
-                contents: bytemuck::cast_slice(&tessellation_buf.vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-
-            self.index_buf = init_ibuf;
-            self.vertex_buf = init_vbuf;
-            self.tessellation_buf = tessellation_buf;
-            self.retessellate = false;
-        }
-
-        Ok(())
-    }
-}
-
-#[derive(Default)]
-pub struct VsState(Option<VsData>);
-
-impl VsState {
-    pub fn uninit(&self) -> bool {
-        self.0.is_none()
-    }
-
+impl VertexShaderContext {
     #[allow(clippy::too_many_lines)]
-    pub fn init(
-        &mut self,
-        wgpu: &WgpuData,
+    pub fn new(
+        wgpu: &GraphicsContext,
         prims_buf: &wgpu::Buffer,
-    ) -> Result<(), TessellationError> {
+    ) -> Result<Self, TessellationError> {
         let mut tessellation_buf: VertexBuffers<_, u16> = VertexBuffers::new();
         let mut tessellator = FillTessellator::new();
 
@@ -244,7 +195,7 @@ impl VsState {
 
         let pipeline = device.create_render_pipeline(&pipeline_desc);
 
-        self.0 = Some(VsData {
+        Ok(VertexShaderContext {
             globals: VsGlobals {
                 resolution: Vec2::ZERO,
                 scroll: Vec2::ZERO,
@@ -258,23 +209,45 @@ impl VsState {
             bind_group,
             pipeline,
             retessellate: true,
-        });
+        })
+    }
+
+    pub fn update(
+        &mut self,
+        wgpu: &GraphicsContext,
+        settings: SimSettings,
+    ) -> Result<(), DrawError> {
+        if self.retessellate {
+            let device = &wgpu.device;
+
+            let mut tessellation_buf = VertexBuffers::new();
+            let mut tessellator = FillTessellator::new();
+
+            tessellator.tessellate_circle(
+                Point::new(0., 0.),
+                settings.particle_radius * PX_PER_UNIT,
+                &FillOptions::default(),
+                &mut BuffersBuilder::new(&mut tessellation_buf, WithId(0)),
+            )?;
+
+            let init_ibuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("index buffer init"),
+                contents: bytemuck::cast_slice(&tessellation_buf.indices),
+                usage: wgpu::BufferUsages::INDEX,
+            });
+
+            let init_vbuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("vertex buffer init"),
+                contents: bytemuck::cast_slice(&tessellation_buf.vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+
+            self.index_buf = init_ibuf;
+            self.vertex_buf = init_vbuf;
+            self.tessellation_buf = tessellation_buf;
+            self.retessellate = false;
+        }
 
         Ok(())
-    }
-}
-
-impl Deref for VsState {
-    type Target = VsData;
-
-    fn deref(&self) -> &Self::Target {
-        self.0.as_ref().unwrap()
-    }
-}
-
-impl DerefMut for VsState {
-    #[track_caller]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.0.as_mut().unwrap()
     }
 }

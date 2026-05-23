@@ -1,6 +1,7 @@
 use core::fmt;
-use lyon::tessellation::TessellationError;
 use std::{backtrace::Backtrace, io, panic::Location};
+
+use lyon::tessellation::TessellationError;
 use thiserror::Error;
 use wgpu::{CreateSurfaceError, RequestAdapterError};
 use winit::error::{EventLoopError, OsError};

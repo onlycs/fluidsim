@@ -2,11 +2,9 @@
 #![allow(unexpected_cfgs)]
 
 #[cfg(not(target_arch = "spirv"))]
-use glam::{Vec2, Vec4};
-
-#[cfg(not(target_arch = "spirv"))]
 use bytemuck::{Pod, Zeroable};
-
+#[cfg(not(target_arch = "spirv"))]
+use glam::{Vec2, Vec4};
 #[cfg(target_arch = "spirv")]
 use spirv_std::glam::{Vec2, Vec4};
 

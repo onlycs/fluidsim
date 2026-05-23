@@ -4,9 +4,11 @@
 use core::f32;
 
 use gpu_shared::{ARRAY_LEN, Globals, MouseState, Primitive, SCALE, Settings};
-use spirv_std::glam::{UVec3, Vec2, Vec4, vec2, vec4};
-use spirv_std::num_traits::Float;
-use spirv_std::spirv;
+use spirv_std::{
+    glam::{UVec3, Vec2, Vec4, vec2, vec4},
+    num_traits::Float,
+    spirv,
+};
 
 fn q_rsqrt(value: f32) -> f32 {
     let x2 = value * 0.5;

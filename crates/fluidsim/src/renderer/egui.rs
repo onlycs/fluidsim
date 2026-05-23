@@ -1,21 +1,19 @@
-use std::ops::{Deref, DerefMut};
-
-use super::wgpu_state::WgpuData;
-
 use egui::{Context, Shadow};
 use egui_wgpu::{Renderer, RendererOptions, ScreenDescriptor};
 use egui_winit::{EventResponse, State};
 use wgpu::{CommandEncoder, TextureView};
 use winit::{event::WindowEvent, window::Window};
 
-pub struct EguiTranslator {
+use super::graphics::GraphicsContext;
+
+pub struct EguiContext {
     context: Context,
     state: State,
     renderer: Renderer,
 }
 
-impl EguiTranslator {
-    pub fn new(wgpu: &WgpuData) -> Self {
+impl EguiContext {
+    pub fn new(wgpu: &GraphicsContext) -> Self {
         let ctx = Context::default();
         let id = ctx.viewport_id();
 
@@ -40,7 +38,7 @@ impl EguiTranslator {
 
     pub fn draw(
         &mut self,
-        wgpu: &WgpuData,
+        wgpu: &GraphicsContext,
         encoder: &mut CommandEncoder,
         surface_view: &TextureView,
         ui: impl FnMut(&mut egui::Ui),
@@ -93,32 +91,5 @@ impl EguiTranslator {
         for x in &output.textures_delta.free {
             self.renderer.free_texture(x);
         }
-    }
-}
-
-#[derive(Default)]
-pub struct EguiState(Option<EguiTranslator>);
-
-impl EguiState {
-    pub fn uninit(&self) -> bool {
-        self.0.is_none()
-    }
-
-    pub fn init(&mut self, wgpu: &WgpuData) {
-        self.0 = Some(EguiTranslator::new(wgpu));
-    }
-}
-
-impl Deref for EguiState {
-    type Target = EguiTranslator;
-
-    fn deref(&self) -> &Self::Target {
-        self.0.as_ref().unwrap()
-    }
-}
-
-impl DerefMut for EguiState {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.0.as_mut().unwrap()
     }
 }

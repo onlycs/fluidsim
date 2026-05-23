@@ -1,8 +1,9 @@
 use std::marker::PhantomData;
 
-use crate::{prelude::*, renderer::shader::vertex::VsCirclePrimitive};
 use bytemuck::NoUninit;
 use gpu_shared::{ARRAY_LEN, MouseState};
+
+use crate::{prelude::*, renderer::shader::vertex::VsCirclePrimitive};
 
 pub struct BufferBinding<A> {
     pub buffer: Arc<wgpu::Buffer>,
