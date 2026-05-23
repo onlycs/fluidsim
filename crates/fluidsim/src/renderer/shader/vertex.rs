@@ -12,6 +12,16 @@ use crate::{prelude::*, renderer::graphics::GraphicsContext};
 pub type VsGlobals = gpu_shared::Globals;
 pub type VsCirclePrimitive = gpu_shared::Primitive;
 
+#[derive(Debug, Snafu)]
+pub enum VertexShaderError {
+    #[snafu(display("At {location}: tessellation error\n{source}"))]
+    Tessellation {
+        source: TessellationError,
+        #[snafu(implicit)]
+        location: Location,
+    },
+}
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
 pub struct VsInput {
@@ -67,16 +77,18 @@ impl VertexShaderContext {
     pub fn new(
         wgpu: &GraphicsContext,
         prims_buf: &wgpu::Buffer,
-    ) -> Result<Self, TessellationError> {
+    ) -> Result<Self, VertexShaderError> {
         let mut tessellation_buf: VertexBuffers<_, u16> = VertexBuffers::new();
         let mut tessellator = FillTessellator::new();
 
-        tessellator.tessellate_circle(
-            Point::new(0., 0.),
-            100.,
-            &FillOptions::default(),
-            &mut BuffersBuilder::new(&mut tessellation_buf, WithId(0)),
-        )?;
+        tessellator
+            .tessellate_circle(
+                Point::new(0., 0.),
+                100.,
+                &FillOptions::default(),
+                &mut BuffersBuilder::new(&mut tessellation_buf, WithId(0)),
+            )
+            .context(TessellationSnafu)?;
 
         let device = &wgpu.device;
 
@@ -216,19 +228,21 @@ impl VertexShaderContext {
         &mut self,
         wgpu: &GraphicsContext,
         settings: SimSettings,
-    ) -> Result<(), DrawError> {
+    ) -> Result<(), VertexShaderError> {
         if self.retessellate {
             let device = &wgpu.device;
 
             let mut tessellation_buf = VertexBuffers::new();
             let mut tessellator = FillTessellator::new();
 
-            tessellator.tessellate_circle(
-                Point::new(0., 0.),
-                settings.particle_radius * PX_PER_UNIT,
-                &FillOptions::default(),
-                &mut BuffersBuilder::new(&mut tessellation_buf, WithId(0)),
-            )?;
+            tessellator
+                .tessellate_circle(
+                    Point::new(0., 0.),
+                    settings.particle_radius * PX_PER_UNIT,
+                    &FillOptions::default(),
+                    &mut BuffersBuilder::new(&mut tessellation_buf, WithId(0)),
+                )
+                .context(TessellationSnafu)?;
 
             let init_ibuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("index buffer init"),

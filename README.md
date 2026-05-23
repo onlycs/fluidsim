@@ -1,21 +1,30 @@
 # fluidsim
 
-## Windows
+## Running
 
-Despite my best efforts, this application crashes on my Windows VM. I have only ever gotten it to work on Linux.
+### Windows
 
-Oddly enough, the Windows binary I built worked on Wine (???). Somehow we came full circle and made a Windows application that only runs on Linux.
-I did not keep this build, unfortunately.
+Install the [redist](https://aka.ms/vs/17/release/vc_redist.x64.exe) first.
 
-## Linux
+### MacOS
 
-A release binary is available from the [releases page](https://github.com/onlycs/fluidsim/releases). It dynamically links to
+Download and extract the provided zip from the [releases page](https://github.com/onlycs/fluidsim/releases). Open a terminal and run
 
-- `libvulkan.so.1`
-- `libwayland-client.so.0`
-- `libxcbcommon.so.0`
+```bash
+xattr -cr /path/to/fluidsim.app
+```
 
-So make sure they are available.
+to remove the quarantine attribute. You should then be able to double-click on it to run it.
+
+### Linux
+
+A release binary is available from the [releases page](https://github.com/onlycs/fluidsim/releases). Make sure the following are available somewhere
+
+- `libgcc`, `glibc`, and friends
+- `libwayland` and friends
+- `libvulkan` and Mesa ICDs
+- `libxcb` and friends
+- `libxkbcommon`
 
 ## Acknowledgements
 

@@ -14,10 +14,25 @@ const LEVEL_WGPU: Level = Level::INFO;
 const LEVEL_EGUI: Level = Level::WARN;
 const LEVEL_HAL: Level = Level::INFO;
 
-#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[cfg(target_os = "windows")]
 fn logfile() -> io::Result<fs::File> {
     let exe = env::current_exe()?;
     let log = exe.parent().unwrap().join("fluidsim.log");
+
+    fs::File::create(&log)
+}
+
+#[cfg(target_os = "macos")]
+fn logfile() -> io::Result<fs::File> {
+    use std::path::Path;
+
+    let exe = env::current_exe()?;
+    let log = exe.parent() // pathto/FluidSim.app/Contents/MacOS
+        .and_then(Path::parent) // pathto/FluidSim.app/Contents
+        .and_then(Path::parent) // pathto/FluidSim.app
+        .and_then(Path::parent) // pathto
+        .unwrap()
+        .join("fluidsim.log"); // pathto/fluidsim.log
 
     fs::File::create(&log)
 }

@@ -15,6 +15,23 @@ use crate::prelude::*;
 const FONT_SIZE: f32 = 18.;
 const LINE_HEIGHT: f32 = 24.;
 
+#[derive(Debug, Snafu)]
+pub enum TextError {
+    #[snafu(display("At {location}: glyphon: prepare error\n{source}"))]
+    Prepare {
+        source: glyphon::PrepareError,
+        #[snafu(implicit)]
+        location: Location,
+    },
+
+    #[snafu(display("At {location}: glyphon: render error\n{source}"))]
+    Render {
+        source: glyphon::RenderError,
+        #[snafu(implicit)]
+        location: Location,
+    },
+}
+
 pub struct PerformanceDisplay {
     pub font_system: FontSystem,
     pub swash_cache: SwashCache,
@@ -23,8 +40,8 @@ pub struct PerformanceDisplay {
     pub renderer: TextRenderer,
     pub buffer: Buffer,
 
-    pub perf: Arc<Mutex<ComputeShaderPerformance>>,
-    pub last_perf: ComputeShaderPerformance,
+    pub data: Arc<Mutex<ComputeShaderPerformance>>,
+    pub last_data: ComputeShaderPerformance,
     pub enabled: Arc<AtomicBool>,
 
     pub timer: Instant,
@@ -74,8 +91,8 @@ impl PerformanceDisplay {
             buffer,
 
             enabled,
-            perf: Arc::new(Mutex::new(ComputeShaderPerformance::default())),
-            last_perf: ComputeShaderPerformance::default(),
+            data: Arc::new(Mutex::new(ComputeShaderPerformance::default())),
+            last_data: ComputeShaderPerformance::default(),
 
             timer: Instant::now(),
             frames: 0,
@@ -89,7 +106,7 @@ impl PerformanceDisplay {
         if self.timer.elapsed().as_secs_f32() > 1. {
             self.fps = self.frames as f32 / self.timer.elapsed().as_secs_f32();
             self.frames = 0;
-            self.last_perf = *self.perf.lock().unwrap();
+            self.last_data = *self.data.lock().unwrap();
             self.timer = Instant::now();
         }
     }
@@ -120,7 +137,7 @@ impl PerformanceDisplay {
         let mut text = format!("FPS: {:.2}", self.fps);
 
         if self.enabled.load(atomic::Ordering::Relaxed) {
-            text = format!("{}{text}", self.last_perf);
+            text = format!("{}{text}", self.last_data);
         }
 
         buffer.set_text(
@@ -144,28 +161,32 @@ impl PerformanceDisplay {
         );
 
         // RP1: draw fps
-        renderer.prepare(
-            device,
-            queue,
-            font_system,
-            atlas,
-            viewport,
-            [TextArea {
-                buffer,
-                left: 10.,
-                top: config.height as f32 - 10. - (LINE_HEIGHT * (text.split('\n').count() as f32)),
-                scale: 1.,
-                bounds: TextBounds {
-                    left: 0,
-                    top: 0,
-                    right: config.width as i32,
-                    bottom: config.height as i32,
-                },
-                default_color: Color::rgb(255, 255, 255),
-                custom_glyphs: &[],
-            }],
-            swash_cache,
-        )?;
+        renderer
+            .prepare(
+                device,
+                queue,
+                font_system,
+                atlas,
+                viewport,
+                [TextArea {
+                    buffer,
+                    left: 10.,
+                    top: config.height as f32
+                        - 10.
+                        - (LINE_HEIGHT * (text.split('\n').count() as f32)),
+                    scale: 1.,
+                    bounds: TextBounds {
+                        left: 0,
+                        top: 0,
+                        right: config.width as i32,
+                        bottom: config.height as i32,
+                    },
+                    default_color: Color::rgb(255, 255, 255),
+                    custom_glyphs: &[],
+                }],
+                swash_cache,
+            )
+            .context(PrepareSnafu)?;
 
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -185,7 +206,9 @@ impl PerformanceDisplay {
                 multiview_mask: None,
             });
 
-            renderer.render(atlas, viewport, &mut pass)?;
+            renderer
+                .render(atlas, viewport, &mut pass)
+                .context(RenderSnafu)?;
         }
 
         atlas.trim();

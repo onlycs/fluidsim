@@ -3,6 +3,39 @@ use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::prelude::*;
 
+#[derive(Debug, Snafu)]
+pub enum GraphicsInitError {
+    #[snafu(display("At {location}: wgpu: failed to create surface\n{source}"))]
+    CreateSurface {
+        source: wgpu::CreateSurfaceError,
+        #[snafu(implicit)]
+        location: Location,
+    },
+
+    #[snafu(display("At {location}: wgpu: failed to request adapter\n{source}"))]
+    RequestAdapter {
+        source: wgpu::RequestAdapterError,
+        #[snafu(implicit)]
+        location: Location,
+    },
+
+    #[snafu(display("At {location}: wgpu: failed to request device\n{source}"))]
+    RequestDevice {
+        source: wgpu::RequestDeviceError,
+        #[snafu(implicit)]
+        location: Location,
+    },
+
+    #[snafu(display(
+        "At {location}: no compatible texture format found\nAvailable formats: {available:?}"
+    ))]
+    NoTextureFormat {
+        available: Vec<wgpu::TextureFormat>,
+        #[snafu(implicit)]
+        location: Location,
+    },
+}
+
 pub struct GraphicsContext {
     pub surface: wgpu::Surface<'static>,
     pub device: wgpu::Device,
@@ -12,7 +45,7 @@ pub struct GraphicsContext {
 }
 
 impl GraphicsContext {
-    pub async fn new(window: Window, window_size: Vec2) -> Result<Self, RendererError> {
+    pub async fn new(window: Window, window_size: Vec2) -> Result<Self, GraphicsInitError> {
         info!("Initializing renderer");
 
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -32,14 +65,18 @@ impl GraphicsContext {
         #[allow(unused_must_use)]
         window.request_inner_size(PhysicalSize::new(winx as i32, winy as i32));
 
-        let surface = instance.create_surface(Arc::clone(&window))?;
+        let surface = instance
+            .create_surface(Arc::clone(&window))
+            .context(CreateSurfaceSnafu)?;
+
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptionsBase {
                 power_preference: PowerPreference::None,
                 force_fallback_adapter: false,
                 compatible_surface: Some(&surface),
             })
-            .await?;
+            .await
+            .context(RequestAdapterSnafu)?;
 
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
@@ -51,18 +88,18 @@ impl GraphicsContext {
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
                 trace: wgpu::Trace::Off,
             })
-            .await?;
+            .await
+            .context(RequestDeviceSnafu)?;
 
         let caps = surface.get_capabilities(&adapter);
         let selected_fmt = [wgpu::TextureFormat::Bgra8Unorm];
 
-        let texture_fmt = caps
-            .formats
-            .iter()
-            .find(|f| selected_fmt.contains(f))
-            .ok_or_else(|| RendererError::NoTextureFormat {
-                available: format!("{:?}", caps.formats),
-            })?;
+        let Some(texture_fmt) = caps.formats.iter().find(|f| selected_fmt.contains(f)) else {
+            return NoTextureFormatSnafu {
+                available: caps.formats,
+            }
+            .fail();
+        };
 
         let surface_cfg = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -84,5 +121,9 @@ impl GraphicsContext {
             config: surface_cfg,
             window,
         })
+    }
+
+    pub(crate) fn reconfigure(&self) {
+        self.surface.configure(&self.device, &self.config);
     }
 }

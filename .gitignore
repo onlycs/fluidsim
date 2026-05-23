@@ -2,4 +2,4 @@
 **/target
 .direnv
 fluidsim.log
-/macos
+/dist

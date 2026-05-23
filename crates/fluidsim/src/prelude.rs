@@ -4,9 +4,10 @@ pub use std::sync::Arc;
 pub use bytemuck::{Pod, Zeroable};
 pub use glam::Vec2;
 pub use gpu_shared::{ARRAY_LEN, MouseState, Settings as SimSettings};
+pub use snafu::{Location, prelude::*};
 use winit::dpi::PhysicalSize;
 
-pub(crate) use crate::{config::*, error::*};
+pub(crate) use crate::config::*;
 
 pub const PX_PER_UNIT: f32 = 100.0;
 

@@ -20,14 +20,81 @@ use crate::{
     renderer::{
         compute::ComputeShaderContext,
         egui::EguiContext,
-        graphics::GraphicsContext,
+        graphics::{GraphicsContext, GraphicsInitError},
         input::{InputHelper, InputResponse},
         panel::{Panel, UpdateData},
         performance::PerformanceDisplay,
-        shader::{compute, vertex::VertexShaderContext},
+        shader::{
+            compute,
+            vertex::{VertexShaderContext, VertexShaderError},
+        },
         state::GameState,
     },
 };
+
+#[derive(Debug, Snafu)]
+pub enum DrawError {
+    #[snafu(display("At {location}: Surface lost during draw"))]
+    SurfaceLost {
+        #[snafu(implicit)]
+        location: Location,
+    },
+
+    #[snafu(display("At {location}: wgpu: poll error\n{source}"))]
+    Poll {
+        source: wgpu::PollError,
+        #[snafu(implicit)]
+        location: Location,
+    },
+
+    #[snafu(display("At {location}: vertex shader update error\n{source}"))]
+    VertexShaderUpdate {
+        source: VertexShaderError,
+        #[snafu(implicit)]
+        location: Location,
+    },
+
+    #[snafu(display("At {location}: performance display error\n{source}"))]
+    PerformanceDisplay {
+        source: performance::TextError,
+        #[snafu(implicit)]
+        location: Location,
+    },
+}
+
+#[derive(Debug, Snafu)]
+pub enum RendererInitError {
+    #[snafu(display("At {location}: graphics init error\n{source}"))]
+    GraphicsInit {
+        source: GraphicsInitError,
+        #[snafu(implicit)]
+        location: Location,
+    },
+
+    #[snafu(display("At {location}: vertex shader init error\n{source}"))]
+    VertexShaderInit {
+        source: VertexShaderError,
+        #[snafu(implicit)]
+        location: Location,
+    },
+}
+
+#[derive(Debug, Snafu)]
+pub enum ResumeError {
+    #[snafu(display("At {location}: winit: window create error\n{source}"))]
+    WindowCreate {
+        source: winit::error::OsError,
+        #[snafu(implicit)]
+        location: Location,
+    },
+
+    #[snafu(display("At {location}: renderer init error\n{source}"))]
+    RendererInit {
+        source: RendererInitError,
+        #[snafu(implicit)]
+        location: Location,
+    },
+}
 
 pub struct RendererInit {
     gfx: GraphicsContext,
@@ -75,12 +142,17 @@ impl RendererInit {
         let surface_tex = match self.gfx.surface.get_current_texture() {
             CurrentSurfaceTexture::Success(tex) => tex,
             CurrentSurfaceTexture::Suboptimal(tex) => {
-                self.gfx
-                    .surface
-                    .configure(&self.gfx.device, &self.gfx.config);
+                self.gfx.reconfigure();
                 tex
             }
-            _ => panic!(),
+            CurrentSurfaceTexture::Outdated => {
+                self.gfx.reconfigure();
+                return Ok(());
+            }
+            CurrentSurfaceTexture::Timeout
+            | CurrentSurfaceTexture::Occluded
+            | CurrentSurfaceTexture::Validation => return Ok(()),
+            CurrentSurfaceTexture::Lost => return SurfaceLostSnafu.fail(),
         };
 
         let surface_view = surface_tex
@@ -119,7 +191,9 @@ impl RendererInit {
             ));
         }
 
-        self.vertex.update(&self.gfx, self.compute.user.settings)?;
+        self.vertex
+            .update(&self.gfx, self.compute.user.settings)
+            .context(VertexShaderUpdateSnafu)?;
 
         queue.write_buffer(
             &self.vertex.globals_buf,
@@ -159,7 +233,9 @@ impl RendererInit {
         }
 
         // draw fps counter
-        self.perf.render(&self.gfx, &mut encoder, &surface_view)?;
+        self.perf
+            .render(&self.gfx, &mut encoder, &surface_view)
+            .context(PerformanceDisplaySnafu)?;
 
         // draw egui
         {
@@ -192,13 +268,13 @@ impl RendererInit {
 
         for buf in readback_buffers {
             let Some(buf) = buf else { continue };
-            let p = Arc::clone(&self.perf.perf);
+            let p = Arc::clone(&self.perf.data);
             self.compute.pipelines.profile(queue, buf, move |profile| {
                 *p.lock().unwrap() = profile;
             });
         }
 
-        device.poll(wgpu::PollType::Poll).unwrap();
+        device.poll(wgpu::PollType::Poll).context(PollSnafu)?;
 
         Ok(())
     }
@@ -214,21 +290,23 @@ impl Renderer {
         Self::Uninit
     }
 
-    async fn init(&mut self, window: Window) -> Result<(), RendererError> {
+    async fn init(&mut self, window: Window) -> Result<(), RendererInitError> {
         let size = window.inner_size().to_vec2();
 
         let panel = Panel::default();
+        let gfx = GraphicsContext::new(window, size)
+            .await
+            .context(GraphicsInitSnafu)?;
 
-        let gfx = GraphicsContext::new(window, size).await?;
-        let compute = ComputeShaderContext::new(&gfx.device, &gfx.queue);
-        let vertex = VertexShaderContext::new(&gfx, &compute.prims_buf())?;
+        let cs = ComputeShaderContext::new(&gfx.device, &gfx.queue);
+        let vs = VertexShaderContext::new(&gfx, &cs.prims_buf()).context(VertexShaderInitSnafu)?;
         let egui = EguiContext::new(&gfx);
         let perf = PerformanceDisplay::new(&gfx, panel.show_perf());
 
         *self = Self::Init(RendererInit {
             gfx,
-            compute,
-            vertex,
+            compute: cs,
+            vertex: vs,
             egui,
             perf,
             panel,
@@ -307,9 +385,11 @@ impl ApplicationHandler for Renderer {
     fn resumed(&mut self, ev: &ActiveEventLoop) {
         // rust iife lol
         (|| {
-            let win = ev.create_window(Window::default_attributes().with_title("fluidsim"))?;
+            let win = ev
+                .create_window(Window::default_attributes().with_title("fluidsim"))
+                .context(WindowCreateSnafu)?;
             win.set_fullscreen(Some(Fullscreen::Borderless(None)));
-            pollster::block_on(self.init(win))?;
+            pollster::block_on(self.init(win)).context(RendererInitSnafu)?;
 
             Ok::<_, ResumeError>(())
         })()

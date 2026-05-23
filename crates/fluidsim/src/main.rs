@@ -1,4 +1,3 @@
-#![feature(error_generic_member_access, trivial_bounds)]
 #![warn(clippy::pedantic)]
 #![allow(
     clippy::similar_names,
@@ -20,20 +19,17 @@
 extern crate tracing;
 
 mod config;
-mod error;
 mod logger;
 mod prelude;
 mod renderer;
 
-use error::InitError;
 use renderer::Renderer;
-use winit::event_loop::EventLoop;
+use winit::{error::EventLoopError, event_loop::EventLoop};
 
-fn main() -> Result<(), InitError> {
+fn main() -> Result<(), EventLoopError> {
     logger::init();
 
     info!("Starting up");
-
     let event_loop = EventLoop::builder().build()?;
     let app = Box::leak(Box::new(Renderer::new()));
 
