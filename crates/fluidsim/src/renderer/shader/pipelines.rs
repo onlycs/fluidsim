@@ -1,4 +1,4 @@
-use super::buffers::Buffers;
+use crate::renderer::buffers::Buffers;
 
 macro_rules! count {
     () => (0);
@@ -73,7 +73,7 @@ macro_rules! pipelines {
             &'a Pipelines,
             &'a mut wgpu::CommandEncoder,
             &'a wgpu::Queue,
-            &'a super::buffers::Buffers,
+            &'a crate::renderer::buffers::Buffers,
             &'a wgpu::ComputePassDescriptor<'a>,
             u32,
         );
@@ -305,56 +305,56 @@ macro_rules! pipelines {
 
 pipelines!(
     compute external_forces as ExternalForces {
-        from user_data use settings, mouse;
+        from uniform use settings, mouse;
         from physics use positions, predictions, velocities;
     }
 
     compute pre_sort as PreSort {
-        from user_data use settings;
+        from uniform use settings;
         from physics use predictions;
         from spatial_hash use indices;
         from sort use lookup, keys;
     }
 
     compute post_sort as PostSort {
-        from user_data use settings;
+        from uniform use settings;
         from spatial_hash use indices;
         from sort use keys;
     }
 
     compute update_densities as UpdateDensities {
-        from user_data use settings;
+        from uniform use settings;
         from physics use predictions, densities;
         from spatial_hash use indices;
         from sort use lookup, keys;
     }
 
     compute pressure_force as PressureForce {
-        from user_data use settings;
+        from uniform use settings;
         from physics use predictions, velocities, densities;
         from spatial_hash use indices;
         from sort use lookup, keys;
     }
 
     compute viscosity as Viscosity {
-        from user_data use settings;
+        from uniform use settings;
         from physics use predictions, velocities;
         from spatial_hash use indices;
         from sort use lookup, keys;
     }
 
     compute update_positions as UpdatePositions {
-        from user_data use settings;
+        from uniform use settings;
         from physics use positions, velocities;
     }
 
     compute collide as Collide {
-        from user_data use settings;
+        from uniform use settings;
         from physics use positions, velocities;
     }
 
     compute copy_prims as CopyPrims {
-        from user_data use settings;
+        from uniform use settings;
         from physics use positions, velocities;
         from drawing use primitives;
     }

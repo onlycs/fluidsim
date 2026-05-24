@@ -19,6 +19,7 @@ pub struct Settings {
 
     pub smoothing_radius: f32,
     pub target_density: f32,
+    pub near_pressure_multiplier: f32,
     pub pressure_multiplier: f32,
     pub mass: f32,
 
@@ -28,12 +29,10 @@ pub struct Settings {
     pub viscosity_strength: f32,
 
     pub num_particles: u32,
+    pub boundary_particles: u32,
     pub particle_radius: f32,
 
     pub window_size: Vec2,
-
-    pub _pad1: u32,
-    pub near_pressure_multiplier: f32,
 }
 
 impl Default for Settings {
@@ -54,21 +53,12 @@ impl Default for Settings {
             interaction_radius: 4.0,
             interaction_strength: 65.0,
 
-            // window size
-            #[cfg(not(target_arch = "wasm32"))]
             window_size: Vec2::new(1200., 800.),
-            #[cfg(target_arch = "wasm32")]
-            window_size: Vec2::new(1500., 1000.),
-
-            #[cfg(not(target_arch = "wasm32"))]
             num_particles: 60 * 60,
-            #[cfg(target_arch = "wasm32")]
-            num_particles: 30 * 30,
+            boundary_particles: 0,
 
             mass: 1.0,
             particle_radius: 0.05,
-
-            _pad1: 0,
         }
     }
 }
@@ -139,5 +129,5 @@ pub struct Globals {
 }
 
 pub const SCALE: f32 = 100.0;
-pub const ARRAY_LEN: usize = 16384;
+pub const ARRAY_LEN: usize = 65536;
 pub const WORKGROUP_SIZE: u32 = 256;

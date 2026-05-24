@@ -1,3 +1,5 @@
+use glam::{UVec2, uvec2};
+
 use crate::prelude::*;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -19,14 +21,14 @@ impl Default for GraphicsSettings {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct InitialConditions {
-    pub particles: Vec2,
+    pub particles: UVec2,
     pub gap: f32,
 }
 
 impl Default for InitialConditions {
     fn default() -> Self {
         Self {
-            particles: Vec2::new(60., 60.),
+            particles: uvec2(60, 60),
             gap: 0.05,
         }
     }

@@ -1,28 +1,32 @@
 use std::collections::HashSet;
 
+use glam::{Vec2, vec2};
+use gpu_shared::MouseState;
 use winit::{
     event::{Modifiers, MouseButton, WindowEvent},
     keyboard::{KeyCode, PhysicalKey},
 };
 
-#[derive(Default)]
-pub struct InputHelper {
-    pub keys: HashSet<KeyCode>,
-    pub mods: Modifiers,
+use crate::renderer::shader::compute::PhysicsShader;
 
-    pub mouse_pos: (f32, f32),
-    pub lmb: bool,
-    pub rmb: bool,
+#[derive(Default)]
+pub(crate) struct InputProcessor {
+    pub(crate) keys: HashSet<KeyCode>,
+    pub(crate) mods: Modifiers,
+
+    mouse_pos: Vec2,
+    lmb: bool,
+    rmb: bool,
 }
 
-pub enum InputResponse {
+pub(crate) enum HumanInput {
     None,
     Keyboard,
     Mouse,
 }
 
-impl InputHelper {
-    pub fn process(&mut self, event: &WindowEvent) -> InputResponse {
+impl InputProcessor {
+    pub(crate) fn process(&mut self, event: &WindowEvent) -> HumanInput {
         match event {
             WindowEvent::KeyboardInput {
                 device_id: _,
@@ -30,7 +34,7 @@ impl InputHelper {
                 is_synthetic: _,
             } => {
                 let PhysicalKey::Code(key) = event.physical_key else {
-                    return InputResponse::None;
+                    return HumanInput::None;
                 };
 
                 if event.state.is_pressed() {
@@ -39,21 +43,21 @@ impl InputHelper {
                     self.keys.remove(&key);
                 }
 
-                InputResponse::Keyboard
+                HumanInput::Keyboard
             }
             WindowEvent::ModifiersChanged(mods) => {
                 self.keys.clear();
                 self.mods = *mods;
 
-                InputResponse::Keyboard
+                HumanInput::Keyboard
             }
             WindowEvent::CursorMoved {
                 device_id: _,
                 position: pos,
             } => {
-                self.mouse_pos = (*pos).into();
+                self.mouse_pos = vec2(pos.x as f32, pos.y as f32);
 
-                InputResponse::Mouse
+                HumanInput::Mouse
             }
             WindowEvent::MouseInput {
                 device_id: _,
@@ -63,16 +67,20 @@ impl InputHelper {
                 match button {
                     MouseButton::Left => self.lmb = state.is_pressed(),
                     MouseButton::Right => self.rmb = state.is_pressed(),
-                    _ => return InputResponse::None,
+                    _ => return HumanInput::None,
                 }
 
-                InputResponse::Mouse
+                HumanInput::Mouse
             }
-            _ => InputResponse::None,
+            _ => HumanInput::None,
         }
     }
 
-    pub fn keydown(&self) -> impl Iterator<Item = KeyCode> + '_ {
+    pub(crate) fn write_mouse(&self, physics: &mut PhysicsShader) {
+        physics.set_mouse(MouseState::new(self.mouse_pos, self.lmb, self.rmb));
+    }
+
+    pub(crate) fn keydown(&self) -> impl Iterator<Item = KeyCode> + '_ {
         self.keys.iter().copied()
     }
 }

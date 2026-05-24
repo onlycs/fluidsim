@@ -1,7 +1,4 @@
-use std::sync::{
-    Mutex,
-    atomic::{self, AtomicBool},
-};
+use std::sync::Mutex;
 
 use glyphon::{
     Attrs, Buffer, Cache, Color, FontSystem, Metrics, Resolution, SwashCache, TextArea, TextAtlas,
@@ -16,7 +13,7 @@ const FONT_SIZE: f32 = 18.;
 const LINE_HEIGHT: f32 = 24.;
 
 #[derive(Debug, Snafu)]
-pub enum TextError {
+pub(crate) enum TextError {
     #[snafu(display("At {location}: glyphon: prepare error\n{source}"))]
     Prepare {
         source: glyphon::PrepareError,
@@ -32,25 +29,25 @@ pub enum TextError {
     },
 }
 
-pub struct PerformanceDisplay {
-    pub font_system: FontSystem,
-    pub swash_cache: SwashCache,
-    pub viewport: Viewport,
-    pub atlas: TextAtlas,
-    pub renderer: TextRenderer,
-    pub buffer: Buffer,
+pub(crate) struct PerformanceDisplay {
+    pub(crate) font_system: FontSystem,
+    pub(crate) swash_cache: SwashCache,
+    pub(crate) viewport: Viewport,
+    pub(crate) atlas: TextAtlas,
+    pub(crate) renderer: TextRenderer,
+    pub(crate) buffer: Buffer,
 
-    pub data: Arc<Mutex<ComputeShaderPerformance>>,
-    pub last_data: ComputeShaderPerformance,
-    pub enabled: Arc<AtomicBool>,
+    pub(crate) data: Arc<Mutex<ComputeShaderPerformance>>,
+    pub(crate) last_data: ComputeShaderPerformance,
+    pub(crate) show: bool,
 
-    pub timer: Instant,
-    pub frames: usize,
-    pub fps: f32,
+    pub(crate) timer: Instant,
+    pub(crate) frames: usize,
+    pub(crate) fps: f32,
 }
 
 impl PerformanceDisplay {
-    pub fn new(wgpu: &GraphicsContext, enabled: Arc<AtomicBool>) -> Self {
+    pub(crate) fn new(wgpu: &GraphicsContext) -> Self {
         let size = wgpu.window.inner_size();
         let scale = wgpu.window.scale_factor() as f32;
 
@@ -90,7 +87,7 @@ impl PerformanceDisplay {
             renderer,
             buffer,
 
-            enabled,
+            show: false,
             data: Arc::new(Mutex::new(ComputeShaderPerformance::default())),
             last_data: ComputeShaderPerformance::default(),
 
@@ -100,7 +97,7 @@ impl PerformanceDisplay {
         }
     }
 
-    pub fn update(&mut self) {
+    pub(crate) fn update(&mut self) {
         self.frames += 1;
 
         if self.timer.elapsed().as_secs_f32() > 1. {
@@ -111,7 +108,19 @@ impl PerformanceDisplay {
         }
     }
 
-    pub fn render(
+    pub(crate) fn resize(&mut self, size: Vec2, scale: f32) {
+        self.buffer.set_size(
+            &mut self.font_system,
+            Some(size.x * scale),
+            Some(size.y * scale),
+        );
+    }
+
+    pub(crate) fn toggle(&mut self) {
+        self.show = !self.show;
+    }
+
+    pub(crate) fn render(
         &mut self,
         wgpu: &GraphicsContext,
         encoder: &mut CommandEncoder,
@@ -136,7 +145,7 @@ impl PerformanceDisplay {
 
         let mut text = format!("FPS: {:.2}", self.fps);
 
-        if self.enabled.load(atomic::Ordering::Relaxed) {
+        if self.show {
             text = format!("{}{text}", self.last_data);
         }
 

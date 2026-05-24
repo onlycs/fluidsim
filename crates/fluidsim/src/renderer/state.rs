@@ -1,59 +1,63 @@
 use crate::prelude::*;
 
-pub struct TimeState {
-    paused: bool,
-    step: bool,
-    last_instant: Instant,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TimeState {
+    Paused,
+    /// Running(time of last-ran frame)
+    Running(Instant),
+    StepRequested,
 }
 
 impl TimeState {
-    pub fn play_pause(&mut self) {
-        self.paused = !self.paused;
-        self.last_instant = Instant::now();
+    pub(crate) fn toggle(&mut self) {
+        *self = match self {
+            TimeState::Paused | TimeState::StepRequested => TimeState::Running(Instant::now()),
+            TimeState::Running(_) => TimeState::Paused,
+        };
     }
 
-    pub fn step(&mut self) {
-        if self.paused {
-            self.step = true;
+    pub(crate) fn pause(&mut self) {
+        *self = TimeState::Paused;
+    }
+
+    pub(crate) fn step(&mut self) {
+        if let TimeState::Paused = self {
+            *self = TimeState::StepRequested;
         } else {
             warn!("Cannot step while not paused");
         }
     }
 }
 
-pub struct GameState {
-    pub time: TimeState,
-    pub gfx: GraphicsSettings,
-    pub init: InitialConditions,
+pub(crate) struct SimulationState {
+    pub(crate) time: TimeState,
+    pub(crate) gfx: GraphicsSettings,
+    pub(crate) init: InitialConditions,
 }
 
-impl GameState {
-    pub fn new() -> Self {
+impl SimulationState {
+    pub(crate) fn new() -> Self {
         Self {
             gfx: GraphicsSettings::default(),
             init: InitialConditions::default(),
-            time: TimeState {
-                paused: true,
-                step: false,
-                last_instant: Instant::now(),
-            },
+            time: TimeState::Paused,
         }
     }
 
-    pub fn dtime(&mut self) -> f32 {
-        if self.time.paused && !self.time.step {
-            return 0.0;
+    /// Calculates the change in time for this simulation frame.
+    pub(crate) fn dtime(&mut self) -> f32 {
+        match &mut self.time {
+            TimeState::Running(prv) => {
+                let now = Instant::now();
+                let dtime = now.duration_since(*prv).as_secs_f64();
+                *prv = now;
+                (dtime as f32).min(1.0 / 60.0) * self.gfx.speed
+            }
+            TimeState::Paused => 0.0,
+            TimeState::StepRequested => {
+                self.time = TimeState::Paused;
+                self.gfx.step_time / 1000.0
+            }
         }
-
-        if self.time.paused {
-            self.time.step = false;
-            return self.gfx.step_time / 1000.0;
-        }
-
-        let now = Instant::now();
-        let dtime = now.duration_since(self.time.last_instant).as_secs_f64();
-        self.time.last_instant = now;
-
-        (dtime as f32).min(1.0 / 60.0) * self.gfx.speed
     }
 }

@@ -48,7 +48,9 @@ pub fn vs_main(
 
     let local_pos = a_position + a_normal;
     let world_pos = local_pos - globals.scroll + prim.translate;
-    let transformed_pos = world_pos * globals.zoom / (0.5 * globals.resolution) * invert_y;
+
+    let centered_pos = world_pos - (globals.resolution * 0.5);
+    let transformed_pos = centered_pos * globals.zoom / (0.5 * globals.resolution) * invert_y;
 
     let z = prim.z_index as f32 / 4096.0;
     let position = vec4(transformed_pos.x, transformed_pos.y, z, 1.0);
@@ -69,7 +71,7 @@ pub fn external_forces(
     #[spirv(global_invocation_id)] id: UVec3,
 ) {
     let id = id.x;
-    if id >= settings.num_particles {
+    if id >= settings.num_particles || id < settings.boundary_particles {
         return;
     }
 
@@ -78,7 +80,7 @@ pub fn external_forces(
     let mut force = gravity;
 
     if mouse.left() || mouse.right() {
-        let mousepos = mouse.position / SCALE - settings.window_size / SCALE * 0.5;
+        let mousepos = mouse.position / SCALE;
         let offset = mousepos - positions[idx];
         let dist2 = offset.dot(offset);
         let interaction_radius_sq = settings.interaction_radius * settings.interaction_radius;
@@ -165,6 +167,9 @@ pub fn update_densities(
     if id >= settings.num_particles {
         return;
     }
+    if id < settings.boundary_particles {
+        return;
+    }
 
     let idx = id as usize;
     let my_pos = predictions[idx];
@@ -177,18 +182,16 @@ pub fn update_densities(
         let other_cell = cell + sp_hash::NEIGHBORS[neighbor_id];
         let hash = sp_hash::cell_hash(other_cell);
         let key = sp_hash::key_from_hash(hash, settings.num_particles);
-        let mut curr_index = starts[key as usize];
+        let start = starts[key as usize];
 
-        while curr_index < settings.num_particles {
-            let particle_key = keys[curr_index as usize];
-
+        for i in start..settings.num_particles {
+            let particle_key = keys[i as usize];
             if particle_key != key {
                 break;
             }
 
-            let other_id = lookup[curr_index as usize];
+            let other_id = lookup[i as usize];
             let other_idx = other_id as usize;
-            curr_index += 1;
 
             let offset = predictions[other_idx] - my_pos;
             let dist_sq = offset.dot(offset);
@@ -199,7 +202,15 @@ pub fn update_densities(
 
             let dist = dist_sq.sqrt();
 
-            // Calculate both density and near-density
+            if dist < 0.5 * settings.particle_radius {
+                let rng_x = ((id as f32) * 12.9898).sin() * 43758.54;
+                let rng_x = rng_x - rng_x.floor();
+                let rng_y = ((id as f32) * 78.233).sin() * 43758.54;
+                let rng_y = rng_y - rng_y.floor();
+                let random_offset = vec2(rng_x - 0.5, rng_y - 0.5) * 0.02;
+                predictions[idx] += random_offset;
+            }
+
             let influence = curves::smoothing(dist, settings.smoothing_radius);
             let near_influence = curves::smoothing_near(dist, settings.smoothing_radius);
 
@@ -225,6 +236,9 @@ pub fn pressure_force(
 ) {
     let id = id.x;
     if id >= settings.num_particles {
+        return;
+    }
+    if id < settings.boundary_particles {
         return;
     }
 
@@ -276,14 +290,31 @@ pub fn pressure_force(
             let dist = 1.0 / inv_dist;
             let dir = offset * inv_dist;
 
-            let other_density = densities[other_idx].x;
-            let other_ndensity = densities[other_idx].y;
-            let other_pressure = curves::density_to_pressure(
-                other_density,
-                settings.target_density,
-                settings.pressure_multiplier,
-            );
-            let other_npressure = other_ndensity * settings.near_pressure_multiplier;
+            let other_is_boundary = other_id < settings.boundary_particles;
+            let other_density = if other_is_boundary {
+                settings.target_density
+            } else {
+                densities[other_idx].x
+            };
+            let other_ndensity = if other_is_boundary {
+                this_ndensity
+            } else {
+                densities[other_idx].y
+            };
+            let other_pressure = if other_is_boundary {
+                this_pressure.max(0.0) // walls can only push, not pull
+            } else {
+                curves::density_to_pressure(
+                    other_density,
+                    settings.target_density,
+                    settings.pressure_multiplier,
+                )
+            };
+            let other_npressure = if other_is_boundary {
+                this_npressure
+            } else {
+                other_ndensity * settings.near_pressure_multiplier
+            };
             let other_pressure_term = other_pressure / other_density.powi(2);
             let other_npressure_term = other_npressure / other_ndensity.max(f32::EPSILON).powi(2);
 
@@ -292,7 +323,7 @@ pub fn pressure_force(
             let pressure_term = this_pressure_term + other_pressure_term;
             force += settings.mass * pressure_term * smoothing_term;
 
-            // Near pressure (prevents clustering)
+            // Near pressure
             let nsmoothing_term = dir * curves::nsmoothing_deriv(dist, settings.smoothing_radius);
             let npressure_term = this_npressure_term + other_npressure_term;
             force += settings.mass * npressure_term * nsmoothing_term;
@@ -317,6 +348,9 @@ pub fn viscosity(
     if id >= settings.num_particles {
         return;
     }
+    if id < settings.boundary_particles {
+        return;
+    }
 
     let idx = id as usize;
     let position = predictions[idx];
@@ -328,18 +362,16 @@ pub fn viscosity(
         let other_cell = cell + sp_hash::NEIGHBORS[neighbor_id];
         let hash = sp_hash::cell_hash(other_cell);
         let key = sp_hash::key_from_hash(hash, settings.num_particles);
-        let mut curr_index = starts[key as usize];
+        let start = starts[key as usize];
 
-        while curr_index < settings.num_particles {
-            let particle_key = keys[curr_index as usize];
-
+        for i in start..settings.num_particles {
+            let particle_key = keys[i as usize];
             if particle_key != key {
                 break;
             }
 
-            let other_id = lookup[curr_index as usize];
+            let other_id = lookup[i as usize];
             let other_idx = other_id as usize;
-            curr_index += 1;
 
             if idx == other_idx {
                 continue;
@@ -355,7 +387,13 @@ pub fn viscosity(
             let dist = dist_sq.sqrt();
             let influence = curves::viscosity_smoothing(dist, settings.smoothing_radius);
 
-            force += (velocities[other_idx] - velocities[idx]) * influence;
+            let other_velocity = if other_id < settings.boundary_particles {
+                vec2(0.0, 0.0)
+            } else {
+                velocities[other_idx]
+            };
+
+            force += (other_velocity - velocities[idx]) * influence;
         }
     }
 
@@ -372,6 +410,9 @@ pub fn update_positions(
 ) {
     let id = id.x;
     if id >= settings.num_particles {
+        return;
+    }
+    if id < settings.boundary_particles {
         return;
     }
 
@@ -391,21 +432,30 @@ pub fn collide(
     if id >= settings.num_particles {
         return;
     }
-
-    let idx = id as usize;
-    let half_size = settings.window_size / SCALE * 0.5;
-
-    // Separate if statements instead of if/else to reduce thread divergence
-    if positions[idx].y.abs() + settings.particle_radius > half_size.y {
-        let sign = 1f32.copysign(positions[idx].y);
-        positions[idx].y = half_size.y * sign - settings.particle_radius * sign;
-        velocities[idx].y *= -settings.collision_damping;
+    // Boundary particles live outside [0, size]; don't clamp them back in.
+    if id < settings.boundary_particles {
+        return;
     }
 
-    if positions[idx].x.abs() + settings.particle_radius > half_size.x {
-        let sign = 1f32.copysign(positions[idx].x);
-        positions[idx].x = half_size.x * sign - settings.particle_radius * sign;
+    let idx = id as usize;
+    let size = settings.window_size / SCALE;
+    let radius = settings.particle_radius;
+
+    if positions[idx].x < radius {
+        positions[idx].x = radius;
         velocities[idx].x *= -settings.collision_damping;
+    }
+    if positions[idx].x > size.x - radius {
+        positions[idx].x = size.x - radius;
+        velocities[idx].x *= -settings.collision_damping;
+    }
+    if positions[idx].y < radius {
+        positions[idx].y = radius;
+        velocities[idx].y *= -settings.collision_damping;
+    }
+    if positions[idx].y > size.y - radius {
+        positions[idx].y = size.y - radius;
+        velocities[idx].y *= -settings.collision_damping;
     }
 }
 
@@ -425,6 +475,12 @@ pub fn copy_prims(
 
     let idx = id as usize;
     const MAX_VEL: f32 = 15.0;
+
+    if id < settings.boundary_particles {
+        prims[idx].translate = positions[idx] * SCALE;
+        prims[idx].color = vec4(0.2, 0.2, 0.2, 1.0);
+        return;
+    }
 
     let speed = velocities[idx].length().clamp(0.0, MAX_VEL);
     let t = speed / MAX_VEL;

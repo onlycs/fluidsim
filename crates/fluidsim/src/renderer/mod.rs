@@ -1,3 +1,4 @@
+mod buffers;
 mod egui;
 mod graphics;
 mod input;
@@ -18,22 +19,22 @@ use winit::{
 use crate::{
     prelude::*,
     renderer::{
-        compute::ComputeShaderContext,
-        egui::EguiContext,
+        compute::PhysicsShader,
+        egui::UiRenderer,
         graphics::{GraphicsContext, GraphicsInitError},
-        input::{InputHelper, InputResponse},
-        panel::{Panel, UpdateData},
+        input::{HumanInput, InputProcessor},
+        panel::Panel,
         performance::PerformanceDisplay,
         shader::{
             compute,
-            vertex::{VertexShaderContext, VertexShaderError},
+            vertex::{CircleShader, VertexShaderError},
         },
-        state::GameState,
+        state::SimulationState,
     },
 };
 
 #[derive(Debug, Snafu)]
-pub enum DrawError {
+pub(crate) enum DrawError {
     #[snafu(display("At {location}: Surface lost during draw"))]
     SurfaceLost {
         #[snafu(implicit)]
@@ -63,7 +64,7 @@ pub enum DrawError {
 }
 
 #[derive(Debug, Snafu)]
-pub enum RendererInitError {
+pub(crate) enum RendererInitError {
     #[snafu(display("At {location}: graphics init error\n{source}"))]
     GraphicsInit {
         source: GraphicsInitError,
@@ -80,7 +81,7 @@ pub enum RendererInitError {
 }
 
 #[derive(Debug, Snafu)]
-pub enum ResumeError {
+pub(crate) enum ResumeError {
     #[snafu(display("At {location}: winit: window create error\n{source}"))]
     WindowCreate {
         source: winit::error::OsError,
@@ -96,57 +97,47 @@ pub enum ResumeError {
     },
 }
 
-pub struct RendererInit {
-    gfx: GraphicsContext,
-    compute: ComputeShaderContext,
-    vertex: VertexShaderContext,
+pub(crate) struct RendererInit {
+    ctx: GraphicsContext,
+    physics: PhysicsShader,
+    vertex: CircleShader,
 
-    egui: EguiContext,
+    ui: UiRenderer,
     panel: Panel,
 
     perf: PerformanceDisplay,
-    input: InputHelper,
-    game: GameState,
+    input: InputProcessor,
+    state: SimulationState,
 }
 
 impl RendererInit {
     fn update_window_size(&mut self, size: Vec2) {
-        let scale = self.gfx.window.scale_factor() as f32;
+        let scale = self.ctx.window.scale_factor() as f32;
 
-        // apply window size
-        self.compute.user.settings.window_size = size;
+        // update subsystems
+        self.physics.resize(size, &self.ctx, &mut self.state);
+        self.perf.resize(size, scale);
         self.vertex.globals.resolution = size;
-        self.gfx.config.width = size.x as u32;
-        self.gfx.config.height = size.y as u32;
 
         // reconfigure surface
-        self.gfx
-            .surface
-            .configure(&self.gfx.device, &self.gfx.config);
-
-        // reconfigure fps counter
-        let PerformanceDisplay {
-            buffer,
-            font_system,
-            ..
-        } = &mut self.perf;
-
-        buffer.set_size(font_system, Some(size.x * scale), Some(size.y * scale));
+        self.ctx.config.width = size.x as u32;
+        self.ctx.config.height = size.y as u32;
+        self.ctx.reconfigure_surface();
     }
 
     #[allow(clippy::too_many_lines)]
     fn draw(&mut self) -> Result<(), DrawError> {
-        let device = &self.gfx.device;
-        let queue = &self.gfx.queue;
+        let device = &self.ctx.device;
+        let queue = &self.ctx.queue;
 
-        let surface_tex = match self.gfx.surface.get_current_texture() {
+        let surface_tex = match self.ctx.surface.get_current_texture() {
             CurrentSurfaceTexture::Success(tex) => tex,
             CurrentSurfaceTexture::Suboptimal(tex) => {
-                self.gfx.reconfigure();
+                self.ctx.reconfigure_surface();
                 tex
             }
             CurrentSurfaceTexture::Outdated => {
-                self.gfx.reconfigure();
+                self.ctx.reconfigure_surface();
                 return Ok(());
             }
             CurrentSurfaceTexture::Timeout
@@ -160,12 +151,12 @@ impl RendererInit {
             .create_view(&wgpu::TextureViewDescriptor::default());
 
         let msaa_tex = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("msaa circle texture"),
+            label: Some("circle/texture:msaa"),
             size: surface_tex.texture.size(),
             mip_level_count: 1,
             sample_count: 4,
             dimension: wgpu::TextureDimension::D2,
-            format: self.gfx.config.format,
+            format: self.ctx.config.format,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             view_formats: &[],
         });
@@ -173,26 +164,19 @@ impl RendererInit {
         let msaa_view = msaa_tex.create_view(&wgpu::TextureViewDescriptor::default());
 
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("physics/encoder"),
+            label: Some("fluidsim/encoder"),
         });
 
-        let framesteps = self.game.gfx.steps_per_frame;
-        let dtime = self.game.dtime() / framesteps as f32;
-        let conditions = &self.game.init;
+        let framesteps = self.state.gfx.steps_per_frame;
+        let dtime = self.state.dtime() / framesteps as f32;
         let mut readback_buffers = vec![];
 
         for _ in 0..framesteps {
-            readback_buffers.push(self.compute.update(
-                device,
-                queue,
-                conditions,
-                &mut encoder,
-                dtime,
-            ));
+            readback_buffers.push(self.physics.update(device, queue, &mut encoder, dtime));
         }
 
         self.vertex
-            .update(&self.gfx, self.compute.user.settings)
+            .update(&self.ctx, self.physics.udata.particle_radius())
             .context(VertexShaderUpdateSnafu)?;
 
         queue.write_buffer(
@@ -228,37 +212,26 @@ impl RendererInit {
             pass.draw_indexed(
                 0..self.vertex.index_buf.size() as u32 / 2,
                 0,
-                0..self.compute.user.settings.num_particles,
+                0..self.physics.udata.num_particles(),
             );
         }
 
         // draw fps counter
         self.perf
-            .render(&self.gfx, &mut encoder, &surface_view)
+            .render(&self.ctx, &mut encoder, &surface_view)
             .context(PerformanceDisplaySnafu)?;
 
         // draw egui
         {
-            let ComputeShaderContext {
-                update: compute::UpdateState { reset, .. },
-                user: compute::UserData { settings, .. },
-                ..
-            } = &mut self.compute;
-
-            let retessellate = &mut self.vertex.retessellate;
-
-            self.egui.draw(
-                &self.gfx,
+            self.ui.draw(
+                &self.ctx,
                 &mut encoder,
                 &surface_view,
                 self.panel.update(
-                    settings,
-                    &mut self.game.gfx,
-                    &mut self.game.init,
-                    UpdateData {
-                        reset,
-                        retessellate,
-                    },
+                    &self.ctx,
+                    &mut self.state,
+                    &mut self.physics,
+                    &mut self.vertex,
                 ),
             );
         }
@@ -267,9 +240,8 @@ impl RendererInit {
         surface_tex.present();
 
         for buf in readback_buffers {
-            let Some(buf) = buf else { continue };
             let p = Arc::clone(&self.perf.data);
-            self.compute.pipelines.profile(queue, buf, move |profile| {
+            self.physics.pipelines.profile(queue, buf, move |profile| {
                 *p.lock().unwrap() = profile;
             });
         }
@@ -280,13 +252,13 @@ impl RendererInit {
     }
 }
 
-pub enum Renderer {
+pub(crate) enum Renderer {
     Uninit,
     Init(RendererInit),
 }
 
 impl Renderer {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::Uninit
     }
 
@@ -298,20 +270,20 @@ impl Renderer {
             .await
             .context(GraphicsInitSnafu)?;
 
-        let cs = ComputeShaderContext::new(&gfx.device, &gfx.queue);
-        let vs = VertexShaderContext::new(&gfx, &cs.prims_buf()).context(VertexShaderInitSnafu)?;
-        let egui = EguiContext::new(&gfx);
-        let perf = PerformanceDisplay::new(&gfx, panel.show_perf());
+        let cs = PhysicsShader::new(&gfx.device, &gfx.queue);
+        let vs = CircleShader::new(&gfx, cs.prims()).context(VertexShaderInitSnafu)?;
+        let egui = UiRenderer::new(&gfx);
+        let perf = PerformanceDisplay::new(&gfx);
 
         *self = Self::Init(RendererInit {
-            gfx,
-            compute: cs,
+            ctx: gfx,
+            physics: cs,
             vertex: vs,
-            egui,
+            ui: egui,
             perf,
             panel,
-            input: InputHelper::default(),
-            game: GameState::new(),
+            input: InputProcessor::default(),
+            state: SimulationState::new(),
         });
 
         Ok(())
@@ -324,40 +296,36 @@ impl ApplicationHandler for Renderer {
             return;
         };
 
-        if this.gfx.window.id() != id {
+        if this.ctx.window.id() != id {
             return;
         }
 
-        if this.egui.event(&this.gfx.window, &event).consumed {
+        if this.ui.event(&this.ctx.window, &event).consumed {
             return;
         }
 
         match this.input.process(&event) {
-            InputResponse::Keyboard => {
+            HumanInput::Keyboard => {
                 for key in this.input.keydown() {
                     match key {
                         KeyCode::Escape => {
                             info!("Got escape, quitting!");
                             event_loop.exit();
                         }
-                        KeyCode::Space => this.game.time.play_pause(),
-                        KeyCode::ArrowRight => this.game.time.step(),
-                        KeyCode::KeyR => this.compute.update.reset = true,
+                        KeyCode::Space => this.state.time.toggle(),
+                        KeyCode::ArrowRight => this.state.time.step(),
+                        KeyCode::KeyR => this.physics.reset(&this.ctx, &mut this.state),
                         KeyCode::KeyC => this.panel.toggle_self(),
                         KeyCode::KeyH => this.panel.toggle_help(),
-                        KeyCode::KeyP => this.panel.toggle_perf(),
+                        KeyCode::KeyP => this.perf.toggle(),
                         _ => {}
                     }
                 }
             }
-            InputResponse::Mouse => {
-                let (x, y) = this.input.mouse_pos;
-
-                let state = MouseState::new([x, y].into(), this.input.lmb, this.input.rmb);
-                this.compute.user.mouse = state;
-                this.compute.update.mouse = true;
+            HumanInput::Mouse => {
+                this.input.write_mouse(&mut this.physics);
             }
-            InputResponse::None => {}
+            HumanInput::None => {}
         }
 
         match &event {
@@ -370,14 +338,14 @@ impl ApplicationHandler for Renderer {
                     error!("Error during draw: {e}");
                     return;
                 }
-                this.gfx.window.request_redraw();
+                this.ctx.window.request_redraw();
                 this.perf.update();
             }
             WindowEvent::Resized(size) => {
                 this.update_window_size(Vec2::new(size.width as f32, size.height as f32));
-                this.gfx.window.request_redraw();
+                this.ctx.window.request_redraw();
             }
-            WindowEvent::Occluded(false) => this.gfx.window.request_redraw(),
+            WindowEvent::Occluded(false) => this.ctx.window.request_redraw(),
             _ => {}
         }
     }

@@ -1,3 +1,4 @@
+use gpu_shared::SCALE;
 use lyon::{
     geom::Point,
     tessellation::{
@@ -58,7 +59,7 @@ impl StrokeVertexConstructor<VsInput> for WithId {
     }
 }
 
-pub struct VertexShaderContext {
+pub struct CircleShader {
     pub globals: VsGlobals,
 
     pub globals_buf: wgpu::Buffer,
@@ -68,11 +69,9 @@ pub struct VertexShaderContext {
 
     pub bind_group: wgpu::BindGroup,
     pub pipeline: wgpu::RenderPipeline,
-
-    pub retessellate: bool,
 }
 
-impl VertexShaderContext {
+impl CircleShader {
     #[allow(clippy::too_many_lines)]
     pub fn new(
         wgpu: &GraphicsContext,
@@ -84,7 +83,7 @@ impl VertexShaderContext {
         tessellator
             .tessellate_circle(
                 Point::new(0., 0.),
-                100.,
+                SimSettings::default().particle_radius * SCALE,
                 &FillOptions::default(),
                 &mut BuffersBuilder::new(&mut tessellation_buf, WithId(0)),
             )
@@ -207,7 +206,7 @@ impl VertexShaderContext {
 
         let pipeline = device.create_render_pipeline(&pipeline_desc);
 
-        Ok(VertexShaderContext {
+        Ok(CircleShader {
             globals: VsGlobals {
                 resolution: Vec2::ZERO,
                 scroll: Vec2::ZERO,
@@ -220,47 +219,39 @@ impl VertexShaderContext {
             tessellation_buf,
             bind_group,
             pipeline,
-            retessellate: true,
         })
     }
 
-    pub fn update(
-        &mut self,
-        wgpu: &GraphicsContext,
-        settings: SimSettings,
-    ) -> Result<(), VertexShaderError> {
-        if self.retessellate {
-            let device = &wgpu.device;
+    pub fn update(&mut self, wgpu: &GraphicsContext, radius: f32) -> Result<(), VertexShaderError> {
+        let device = &wgpu.device;
 
-            let mut tessellation_buf = VertexBuffers::new();
-            let mut tessellator = FillTessellator::new();
+        let mut tessellation_buf = VertexBuffers::new();
+        let mut tessellator = FillTessellator::new();
 
-            tessellator
-                .tessellate_circle(
-                    Point::new(0., 0.),
-                    settings.particle_radius * PX_PER_UNIT,
-                    &FillOptions::default(),
-                    &mut BuffersBuilder::new(&mut tessellation_buf, WithId(0)),
-                )
-                .context(TessellationSnafu)?;
+        tessellator
+            .tessellate_circle(
+                Point::new(0., 0.),
+                radius * SCALE,
+                &FillOptions::default(),
+                &mut BuffersBuilder::new(&mut tessellation_buf, WithId(0)),
+            )
+            .context(TessellationSnafu)?;
 
-            let init_ibuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("index buffer init"),
-                contents: bytemuck::cast_slice(&tessellation_buf.indices),
-                usage: wgpu::BufferUsages::INDEX,
-            });
+        let init_ibuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("index buffer init"),
+            contents: bytemuck::cast_slice(&tessellation_buf.indices),
+            usage: wgpu::BufferUsages::INDEX,
+        });
 
-            let init_vbuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("vertex buffer init"),
-                contents: bytemuck::cast_slice(&tessellation_buf.vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
+        let init_vbuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("vertex buffer init"),
+            contents: bytemuck::cast_slice(&tessellation_buf.vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
 
-            self.index_buf = init_ibuf;
-            self.vertex_buf = init_vbuf;
-            self.tessellation_buf = tessellation_buf;
-            self.retessellate = false;
-        }
+        self.index_buf = init_ibuf;
+        self.vertex_buf = init_vbuf;
+        self.tessellation_buf = tessellation_buf;
 
         Ok(())
     }

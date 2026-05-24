@@ -1,136 +1,136 @@
-use std::sync::atomic::{self, AtomicBool};
-
 use egui::{Button, RichText, Slider};
 
-use crate::prelude::*;
+use crate::{
+    prelude::*,
+    renderer::{
+        graphics::GraphicsContext,
+        shader::{compute::PhysicsShader, vertex::CircleShader},
+        state::SimulationState,
+    },
+};
 
 const TEXT_SIZE: f32 = 16.0;
 
-#[allow(clippy::struct_field_names)]
 pub struct Panel {
-    show_self: bool,
+    show: bool,
     show_help: bool,
-    show_perf: Arc<AtomicBool>,
 }
 
 impl Default for Panel {
     fn default() -> Self {
         Self {
-            show_self: true,
+            show: true,
             show_help: true,
-            show_perf: Arc::new(AtomicBool::new(false)),
         }
     }
 }
 
-#[derive(Debug)]
-pub struct UpdateData<'a> {
-    pub reset: &'a mut bool,
-    pub retessellate: &'a mut bool,
-}
-
 impl Panel {
-    pub fn show_perf(&self) -> Arc<AtomicBool> {
-        Arc::clone(&self.show_perf)
-    }
-
     #[allow(clippy::too_many_lines)]
     pub fn update<'a>(
         &'a self,
-        sim: &'a mut SimSettings,
-        gfx: &'a mut GraphicsSettings,
-        init: &'a mut InitialConditions,
-        update: UpdateData<'a>,
+        ctx: &'a GraphicsContext,
+        state: &'a mut SimulationState,
+        physics: &'a mut PhysicsShader,
+        circles: &'a mut CircleShader,
     ) -> impl FnMut(&mut egui::Ui) + 'a {
-        let UpdateData {
-            reset,
-            retessellate,
-        } = update;
-
         |ui: &mut egui::Ui| {
-            if !self.show_self {
+            let settings = physics.lease_panel();
+
+            let mut reset = false;
+            let mut retessellate = false;
+
+            if !self.show {
                 return;
             }
 
             egui::Window::new("Simulation Settings").show(ui.ctx(), |ui| {
                 ui.label(RichText::new("Graphics Settings").size(TEXT_SIZE).strong());
 
-                ui.add(Slider::new(&mut gfx.speed, 0.5..=2.0).text("Speed (multiplier)"))
+                ui.add(Slider::new(&mut state.gfx.speed, 0.5..=2.0).text("Speed (multiplier)"))
                     .changed();
 
-                ui.add(Slider::new(&mut gfx.step_time, 1.0..=60.0).text("Step Time (ms)"))
+                ui.add(Slider::new(&mut state.gfx.step_time, 1.0..=60.0).text("Step Time (ms)"))
                     .changed();
 
-                ui.add(Slider::new(&mut gfx.steps_per_frame, 1..=5).text("Steps per Frame"))
+                ui.add(Slider::new(&mut state.gfx.steps_per_frame, 1..=5).text("Steps per Frame"))
                     .changed();
 
                 ui.add_space(25.0);
                 ui.label(RichText::new("Physics Settings").size(TEXT_SIZE).strong());
 
-                ui.add(Slider::new(&mut sim.gravity, -20.0..=20.0).text("Gravity"));
+                ui.add(Slider::new(&mut settings.gravity, -20.0..=20.0).text("Gravity"));
 
                 ui.add(
-                    Slider::new(&mut sim.collision_damping, 0.0..=1.0).text("Collision Dampening"),
+                    Slider::new(&mut settings.collision_damping, 0.0..=1.0)
+                        .text("Collision Dampening"),
                 );
 
                 ui.add_space(25.0);
                 ui.label(RichText::new("SPH Settings").size(TEXT_SIZE).strong());
 
-                ui.add(Slider::new(&mut sim.smoothing_radius, 0.01..=4.0).text("Smoothing Radius"));
-
-                ui.add(Slider::new(&mut sim.target_density, 0.1..=175.0).text("Target Density"));
+                ui.add(
+                    Slider::new(&mut settings.smoothing_radius, 0.01..=4.0)
+                        .text("Smoothing Radius"),
+                );
 
                 ui.add(
-                    Slider::new(&mut sim.pressure_multiplier, 1.0..=700.0)
+                    Slider::new(&mut settings.target_density, 0.1..=175.0).text("Target Density"),
+                );
+
+                ui.add(
+                    Slider::new(&mut settings.pressure_multiplier, 1.0..=700.0)
                         .text("Pressure Multiplier"),
                 );
 
                 ui.add(
-                    Slider::new(&mut sim.near_pressure_multiplier, 0.0..=50.0)
+                    Slider::new(&mut settings.near_pressure_multiplier, 0.0..=50.0)
                         .text("Near Pressure Multiplier"),
                 );
 
                 ui.add(
-                    Slider::new(&mut sim.viscosity_strength, 0.0..=1.0).text("Viscosity Strength"),
+                    Slider::new(&mut settings.viscosity_strength, 0.0..=1.0)
+                        .text("Viscosity Strength"),
                 );
 
                 ui.add_space(25.0);
                 ui.label(RichText::new("Mouse Settings").size(TEXT_SIZE).strong());
 
                 ui.add(
-                    Slider::new(&mut sim.interaction_radius, 0.0..=10.0).text("Interaction Radius"),
+                    Slider::new(&mut settings.interaction_radius, 0.0..=10.0)
+                        .text("Interaction Radius"),
                 );
 
                 ui.add(
-                    Slider::new(&mut sim.interaction_strength, 0.0..=100.0)
+                    Slider::new(&mut settings.interaction_strength, 0.0..=100.0)
                         .text("Interaction Strength"),
                 );
 
                 ui.add_space(25.0);
                 ui.label(RichText::new("Initial Conditions").size(TEXT_SIZE).strong());
 
-                *reset |= ui
+                reset |= ui
                     .add(
-                        Slider::new(&mut init.particles.x, 1.0..=100.0)
+                        Slider::new(&mut state.init.particles.x, 1..=100)
                             .integer()
                             .text("Particles X"),
                     )
                     .changed();
 
-                *reset |= ui
+                reset |= ui
                     .add(
-                        Slider::new(&mut init.particles.y, 1.0..=100.0)
+                        Slider::new(&mut state.init.particles.y, 1..=100)
                             .integer()
                             .text("Particles Y"),
                     )
                     .changed();
 
-                *reset |= ui
-                    .add(Slider::new(&mut init.gap, 0.0..=3.0).text("Initial Gap"))
+                reset |= ui
+                    .add(Slider::new(&mut state.init.gap, 0.0..=3.0).text("Initial Gap"))
                     .changed();
 
-                *retessellate |= ui
-                    .add(Slider::new(&mut sim.particle_radius, 0.0..=1.0).text("Radius"))
+                retessellate |= ui
+                    .add(Slider::new(&mut settings.particle_radius, 0.0..=1.0).text("Radius"))
                     .changed();
 
                 ui.add_space(25.0);
@@ -140,9 +140,9 @@ impl Panel {
                     .add_sized([240., 30.], Button::new("Default Settings"))
                     .clicked()
                 {
-                    *reset = true;
-                    *sim = SimSettings {
-                        window_size: sim.window_size,
+                    reset = true;
+                    *settings = SimSettings {
+                        window_size: settings.window_size,
                         ..SimSettings::default()
                     }
                 }
@@ -160,21 +160,17 @@ impl Panel {
                 }
             });
 
-            // validation
-            if init.particles.x <= 0.0 {
-                init.particles.x = 1.0;
+            if settings.particle_radius <= 0.0 {
+                settings.particle_radius = 0.01;
             }
 
-            if init.particles.y <= 0.0 {
-                init.particles.y = 1.0;
+            if retessellate {
+                circles.update(ctx, settings.particle_radius).unwrap();
             }
 
-            if sim.particle_radius <= 0.0 {
-                sim.particle_radius = 0.01;
+            if reset {
+                physics.reset(ctx, state);
             }
-
-            init.particles.x = init.particles.x.round();
-            init.particles.y = init.particles.y.round();
         }
     }
 
@@ -183,10 +179,6 @@ impl Panel {
     }
 
     pub fn toggle_self(&mut self) {
-        self.show_self = !self.show_self;
-    }
-
-    pub fn toggle_perf(&mut self) {
-        self.show_perf.fetch_not(atomic::Ordering::Relaxed);
+        self.show = !self.show;
     }
 }

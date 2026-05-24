@@ -6,13 +6,13 @@ use winit::{event::WindowEvent, window::Window};
 
 use super::graphics::GraphicsContext;
 
-pub struct EguiContext {
+pub struct UiRenderer {
     context: Context,
     state: State,
     renderer: Renderer,
 }
 
-impl EguiContext {
+impl UiRenderer {
     pub fn new(wgpu: &GraphicsContext) -> Self {
         let ctx = Context::default();
         let id = ctx.viewport_id();

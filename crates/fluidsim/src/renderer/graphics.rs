@@ -123,7 +123,7 @@ impl GraphicsContext {
         })
     }
 
-    pub(crate) fn reconfigure(&self) {
+    pub(crate) fn reconfigure_surface(&self) {
         self.surface.configure(&self.device, &self.config);
     }
 }

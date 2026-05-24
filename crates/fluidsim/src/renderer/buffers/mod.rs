@@ -103,12 +103,12 @@ macro_rules! buffers {
                 let query_set = device.create_query_set(&wgpu::QuerySetDescriptor {
                     label: Some("physics/profiler/query_set"),
                     ty: wgpu::QueryType::Timestamp,
-                    count: 2 * super::pipelines::PIPELINES as u32,
+                    count: 2 * super::shader::pipelines::PIPELINES as u32,
                 });
 
                 let query_buffer = Arc::new(device.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("physics/profiler/query_buffer"),
-                    size: 2 * super::pipelines::PIPELINES as u64 * ::std::mem::size_of::<u64>() as u64,
+                    size: 2 * super::shader::pipelines::PIPELINES as u64 * ::std::mem::size_of::<u64>() as u64,
                     usage: wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::QUERY_RESOLVE,
                     mapped_at_creation: false,
                 }));
@@ -139,7 +139,7 @@ macro_rules! buffers {
 }
 
 buffers!(
-    group user_data(UserData) {
+    group uniform(Uniform) {
         settings(SimSettings): uniform; COPY_DST,
         mouse(MouseState): uniform; COPY_DST,
     }
