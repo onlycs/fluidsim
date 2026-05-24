@@ -1,5 +1,6 @@
 use std::sync::Mutex;
 
+use glam::UVec2;
 use glyphon::{
     Attrs, Buffer, Cache, Color, FontSystem, Metrics, Resolution, SwashCache, TextArea, TextAtlas,
     TextBounds, TextRenderer, Viewport, Weight,
@@ -108,11 +109,11 @@ impl PerformanceDisplay {
         }
     }
 
-    pub(crate) fn resize(&mut self, size: Vec2, scale: f32) {
+    pub(crate) fn resize(&mut self, size: UVec2, scale: f32) {
         self.buffer.set_size(
             &mut self.font_system,
-            Some(size.x * scale),
-            Some(size.y * scale),
+            Some(size.x as f32 * scale),
+            Some(size.y as f32 * scale),
         );
     }
 

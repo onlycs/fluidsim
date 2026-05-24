@@ -1,4 +1,4 @@
-use glam::vec2;
+use glam::{UVec2, vec2};
 use gpu_shared::SCALE;
 use wgpu_sort::Sorter;
 
@@ -18,10 +18,6 @@ pub(crate) struct PhysicsUniformData {
 }
 
 impl PhysicsUniformData {
-    pub(crate) fn particle_radius(&self) -> f32 {
-        self.settings.particle_radius
-    }
-
     pub(crate) fn num_particles(&self) -> u32 {
         self.settings.num_particles
     }
@@ -66,25 +62,32 @@ impl PhysicsShader {
         }
     }
 
-    fn reset_resize(&mut self, rs: Option<Vec2>, ctx: &GraphicsContext, sim: &mut SimulationState) {
+    fn reset_resize(
+        &mut self,
+        rs: Option<UVec2>,
+        ctx: &GraphicsContext,
+        sim: &mut SimulationState,
+    ) {
+        let settings = &mut self.udata.settings;
+
         if let Some(size) = rs {
-            self.udata.settings.window_size = size;
+            settings.window_size = size;
         }
 
         let nx = sim.init.particles.x as f32;
         let ny = sim.init.particles.y as f32;
         let gap = sim.init.gap;
-        let size = self.udata.settings.particle_radius * 2.0;
+        let size = settings.particle_radius * 2.0;
 
         // calculate the position of the top-left particle
-        let screen = self.udata.settings.window_size / SCALE;
+        let screen = settings.window_size.as_vec2() / SCALE;
         let half = screen / 2.;
         let ibox = vec2(nx * size + nx * gap - gap, ny * size + ny * gap - gap);
         let topleft = half - ibox / 2.;
 
         // calculate boundary conditions, 2d
-        let sprest = (self.udata.settings.mass / self.udata.settings.target_density).sqrt();
-        let r1_particles = (screen / sprest).ceil(); // [x, y] the number of boundary particles in the first ring
+        let sprest = (settings.mass / settings.target_density).sqrt();
+        let r1_particles = ((screen + 2. * settings.particle_radius) / sprest).ceil(); // [x, y] the number of boundary particles in the first ring
         let r1_size = r1_particles * sprest; // [x, y] the size of the first ring of boundary particles
         let r1_diff = (r1_size - screen) / 2.; // [dx, dy] the difference between the screen and the first ring of boundary particles
         let r1_tl = -r1_diff; // [x, y] coordinates of the top-left particle in the first ring
@@ -121,7 +124,7 @@ impl PhysicsShader {
             }
         }
 
-        self.udata.settings.boundary_particles = ctr as u32;
+        settings.boundary_particles = ctr as u32;
 
         for i in 0..nx as usize {
             for j in 0..ny as usize {
@@ -140,9 +143,10 @@ impl PhysicsShader {
             }
         }
 
-        self.udata.settings.num_particles = ctr as u32;
+        settings.num_particles = ctr as u32;
 
         let queue = &ctx.queue;
+        self.buffers.uniform.settings.reset(queue, &[*settings]);
         self.buffers.physics.positions.reset(queue, &positions);
         self.buffers.physics.predictions.reset(queue, &positions);
         self.buffers.physics.velocities.reset(queue, &EMPTY_VEC2);
@@ -158,7 +162,7 @@ impl PhysicsShader {
         self.reset_resize(None, ctx, sim);
     }
 
-    pub(crate) fn resize(&mut self, size: Vec2, ctx: &GraphicsContext, sim: &mut SimulationState) {
+    pub(crate) fn resize(&mut self, size: UVec2, ctx: &GraphicsContext, sim: &mut SimulationState) {
         self.reset_resize(Some(size), ctx, sim);
     }
 

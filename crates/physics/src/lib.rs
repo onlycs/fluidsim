@@ -48,9 +48,10 @@ pub fn vs_main(
 
     let local_pos = a_position + a_normal;
     let world_pos = local_pos - globals.scroll + prim.translate;
+    let res = globals.resolution.as_vec2();
 
-    let centered_pos = world_pos - (globals.resolution * 0.5);
-    let transformed_pos = centered_pos * globals.zoom / (0.5 * globals.resolution) * invert_y;
+    let centered_pos = world_pos - (res * 0.5);
+    let transformed_pos = centered_pos * globals.zoom / (0.5 * res) * invert_y;
 
     let z = prim.z_index as f32 / 4096.0;
     let position = vec4(transformed_pos.x, transformed_pos.y, z, 1.0);
@@ -265,15 +266,18 @@ pub fn pressure_force(
         let other_cell = cell + sp_hash::NEIGHBORS[neighbor_id];
         let hash = sp_hash::cell_hash(other_cell);
         let key = sp_hash::key_from_hash(hash, settings.num_particles);
-        let mut search_idx = starts[key as usize];
+        let start = starts[key as usize];
 
-        while search_idx < settings.num_particles
-            && let particle_key = keys[search_idx as usize]
-            && particle_key == key
-        {
-            let other_id = lookup[search_idx as usize];
+        for search_id in start..settings.num_particles {
+            let search_idx = search_id as usize;
+
+            let particle_key = keys[search_idx];
+            if particle_key != key {
+                break;
+            }
+
+            let other_id = lookup[search_idx];
             let other_idx = other_id as usize;
-            search_idx += 1;
 
             if idx == other_idx {
                 continue;
@@ -291,30 +295,28 @@ pub fn pressure_force(
             let dir = offset * inv_dist;
 
             let other_is_boundary = other_id < settings.boundary_particles;
-            let other_density = if other_is_boundary {
-                settings.target_density
+
+            let other_density: f32;
+            let other_ndensity: f32;
+            let other_pressure: f32;
+            let other_npressure: f32;
+
+            if other_is_boundary {
+                other_density = settings.target_density;
+                other_ndensity = this_ndensity;
+                other_pressure = this_pressure.max(0.0);
+                other_npressure = this_npressure;
             } else {
-                densities[other_idx].x
-            };
-            let other_ndensity = if other_is_boundary {
-                this_ndensity
-            } else {
-                densities[other_idx].y
-            };
-            let other_pressure = if other_is_boundary {
-                this_pressure.max(0.0) // walls can only push, not pull
-            } else {
-                curves::density_to_pressure(
+                other_density = densities[other_idx].x;
+                other_ndensity = densities[other_idx].y;
+                other_pressure = curves::density_to_pressure(
                     other_density,
                     settings.target_density,
                     settings.pressure_multiplier,
-                )
-            };
-            let other_npressure = if other_is_boundary {
-                this_npressure
-            } else {
-                other_ndensity * settings.near_pressure_multiplier
-            };
+                );
+                other_npressure = other_ndensity * settings.near_pressure_multiplier;
+            }
+
             let other_pressure_term = other_pressure / other_density.powi(2);
             let other_npressure_term = other_npressure / other_ndensity.max(f32::EPSILON).powi(2);
 
@@ -438,7 +440,7 @@ pub fn collide(
     }
 
     let idx = id as usize;
-    let size = settings.window_size / SCALE;
+    let size = vec2(settings.window_size.x as f32, settings.window_size.y as f32) / SCALE;
     let radius = settings.particle_radius;
 
     if positions[idx].x < radius {

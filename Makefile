@@ -14,8 +14,6 @@ win:
 
 osx:
 	mkdir -p dist
-	SDKROOT=$(SDKROOT) cargo zigbuild --target aarch64-apple-darwin --release
-	SDKROOT=$(SDKROOT) cargo zigbuild --target x86_64-apple-darwin --release
 	SDKROOT=$(SDKROOT) cargo zigbuild --target universal2-apple-darwin --release
 	cp target/universal2-apple-darwin/release/fluidsim osx/FluidSim.app/Contents/MacOS/FluidSim
 	zip -r dist/fluidsim-osx-universal.zip osx/FluidSim.app

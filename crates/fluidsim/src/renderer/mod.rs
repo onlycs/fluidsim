@@ -7,6 +7,7 @@ mod performance;
 mod shader;
 mod state;
 
+use glam::UVec2;
 use wgpu::CurrentSurfaceTexture;
 use winit::{
     application::ApplicationHandler,
@@ -44,13 +45,6 @@ pub(crate) enum DrawError {
     #[snafu(display("At {location}: wgpu: poll error\n{source}"))]
     Poll {
         source: wgpu::PollError,
-        #[snafu(implicit)]
-        location: Location,
-    },
-
-    #[snafu(display("At {location}: vertex shader update error\n{source}"))]
-    VertexShaderUpdate {
-        source: VertexShaderError,
         #[snafu(implicit)]
         location: Location,
     },
@@ -111,17 +105,17 @@ pub(crate) struct RendererInit {
 }
 
 impl RendererInit {
-    fn update_window_size(&mut self, size: Vec2) {
+    fn update_window_size(&mut self, size: UVec2) {
         let scale = self.ctx.window.scale_factor() as f32;
 
         // update subsystems
         self.physics.resize(size, &self.ctx, &mut self.state);
         self.perf.resize(size, scale);
-        self.vertex.globals.resolution = size;
+        self.vertex.resize(&self.ctx, size);
 
         // reconfigure surface
-        self.ctx.config.width = size.x as u32;
-        self.ctx.config.height = size.y as u32;
+        self.ctx.config.width = size.x;
+        self.ctx.config.height = size.y;
         self.ctx.reconfigure_surface();
     }
 
@@ -150,19 +144,6 @@ impl RendererInit {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let msaa_tex = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("circle/texture:msaa"),
-            size: surface_tex.texture.size(),
-            mip_level_count: 1,
-            sample_count: 4,
-            dimension: wgpu::TextureDimension::D2,
-            format: self.ctx.config.format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            view_formats: &[],
-        });
-
-        let msaa_view = msaa_tex.create_view(&wgpu::TextureViewDescriptor::default());
-
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("fluidsim/encoder"),
         });
@@ -175,46 +156,9 @@ impl RendererInit {
             readback_buffers.push(self.physics.update(device, queue, &mut encoder, dtime));
         }
 
+        // draw particles
         self.vertex
-            .update(&self.ctx, self.physics.udata.particle_radius())
-            .context(VertexShaderUpdateSnafu)?;
-
-        queue.write_buffer(
-            &self.vertex.globals_buf,
-            0,
-            bytemuck::cast_slice(&[self.vertex.globals]),
-        );
-
-        // draw dots
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: None,
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &msaa_view,
-                    resolve_target: Some(&surface_view),
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    },
-                    depth_slice: None,
-                })],
-                depth_stencil_attachment: None,
-                occlusion_query_set: None,
-                timestamp_writes: None,
-                multiview_mask: None,
-            });
-
-            pass.set_pipeline(&self.vertex.pipeline);
-            pass.set_bind_group(0, &self.vertex.bind_group, &[]);
-            pass.set_index_buffer(self.vertex.index_buf.slice(..), wgpu::IndexFormat::Uint16);
-            pass.set_vertex_buffer(0, self.vertex.vertex_buf.slice(..));
-
-            pass.draw_indexed(
-                0..self.vertex.index_buf.size() as u32 / 2,
-                0,
-                0..self.physics.udata.num_particles(),
-            );
-        }
+            .draw(&self.ctx, &mut encoder, &surface_view, &self.physics.udata);
 
         // draw fps counter
         self.perf
@@ -270,15 +214,16 @@ impl Renderer {
             .await
             .context(GraphicsInitSnafu)?;
 
-        let cs = PhysicsShader::new(&gfx.device, &gfx.queue);
-        let vs = CircleShader::new(&gfx, cs.prims()).context(VertexShaderInitSnafu)?;
+        let phyiscs = PhysicsShader::new(&gfx.device, &gfx.queue);
+        let circle = CircleShader::new(&gfx, phyiscs.prims(), size.as_uvec2())
+            .context(VertexShaderInitSnafu)?;
         let egui = UiRenderer::new(&gfx);
         let perf = PerformanceDisplay::new(&gfx);
 
         *self = Self::Init(RendererInit {
             ctx: gfx,
-            physics: cs,
-            vertex: vs,
+            physics: phyiscs,
+            vertex: circle,
             ui: egui,
             perf,
             panel,
@@ -342,7 +287,7 @@ impl ApplicationHandler for Renderer {
                 this.perf.update();
             }
             WindowEvent::Resized(size) => {
-                this.update_window_size(Vec2::new(size.width as f32, size.height as f32));
+                this.update_window_size(UVec2::new(size.width, size.height));
                 this.ctx.window.request_redraw();
             }
             WindowEvent::Occluded(false) => this.ctx.window.request_redraw(),

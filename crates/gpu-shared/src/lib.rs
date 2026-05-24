@@ -1,12 +1,13 @@
 #![no_std]
 #![allow(unexpected_cfgs)]
 
-#[cfg(not(target_arch = "spirv"))]
-use bytemuck::{Pod, Zeroable};
-#[cfg(not(target_arch = "spirv"))]
-use glam::{Vec2, Vec4};
 #[cfg(target_arch = "spirv")]
-use spirv_std::glam::{Vec2, Vec4};
+use spirv_std::glam::{UVec2, Vec2, Vec4};
+#[cfg(not(target_arch = "spirv"))]
+use {
+    bytemuck::{Pod, Zeroable},
+    glam::{UVec2, Vec2, Vec4},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(not(target_arch = "spirv"), derive(Pod, Zeroable))]
@@ -32,7 +33,7 @@ pub struct Settings {
     pub boundary_particles: u32,
     pub particle_radius: f32,
 
-    pub window_size: Vec2,
+    pub window_size: UVec2,
 }
 
 impl Default for Settings {
@@ -53,7 +54,7 @@ impl Default for Settings {
             interaction_radius: 4.0,
             interaction_strength: 65.0,
 
-            window_size: Vec2::new(1200., 800.),
+            window_size: UVec2::new(1200, 800),
             num_particles: 60 * 60,
             boundary_particles: 0,
 
@@ -121,7 +122,7 @@ pub struct Primitive {
 #[cfg_attr(not(target_arch = "spirv"), derive(Pod, Zeroable))]
 #[repr(C)]
 pub struct Globals {
-    pub resolution: Vec2,
+    pub resolution: UVec2,
     pub scroll: Vec2,
     pub zoom: f32,
     pub _pad1: f32,

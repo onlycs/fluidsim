@@ -1,3 +1,4 @@
+use glam::UVec2;
 use gpu_shared::SCALE;
 use lyon::{
     geom::Point,
@@ -8,13 +9,16 @@ use lyon::{
 };
 use wgpu::{BindGroupLayoutDescriptor, util::DeviceExt};
 
-use crate::{prelude::*, renderer::graphics::GraphicsContext};
+use crate::{
+    prelude::*,
+    renderer::{graphics::GraphicsContext, shader::compute::PhysicsUniformData},
+};
 
-pub type VsGlobals = gpu_shared::Globals;
-pub type VsCirclePrimitive = gpu_shared::Primitive;
+pub(crate) type VsGlobals = gpu_shared::Globals;
+pub(crate) type VsCirclePrimitive = gpu_shared::Primitive;
 
 #[derive(Debug, Snafu)]
-pub enum VertexShaderError {
+pub(crate) enum VertexShaderError {
     #[snafu(display("At {location}: tessellation error\n{source}"))]
     Tessellation {
         source: TessellationError,
@@ -25,19 +29,19 @@ pub enum VertexShaderError {
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
-pub struct VsInput {
-    pub position: [f32; 2],
-    pub normal: [f32; 2],
-    pub prim_id: u32,
+pub(crate) struct VsInput {
+    pub(crate) position: [f32; 2],
+    pub(crate) normal: [f32; 2],
+    pub(crate) prim_id: u32,
 }
 
 impl VsInput {
-    pub fn descriptor() -> [wgpu::VertexAttribute; 3] {
+    pub(crate) fn descriptor() -> [wgpu::VertexAttribute; 3] {
         wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Uint32]
     }
 }
 
-pub struct WithId(pub u32);
+pub(crate) struct WithId(pub(crate) u32);
 
 impl FillVertexConstructor<VsInput> for WithId {
     fn new_vertex(&mut self, vertex: FillVertex) -> VsInput {
@@ -59,23 +63,27 @@ impl StrokeVertexConstructor<VsInput> for WithId {
     }
 }
 
-pub struct CircleShader {
-    pub globals: VsGlobals,
+pub(crate) struct CircleShader {
+    globals: VsGlobals,
 
-    pub globals_buf: wgpu::Buffer,
-    pub index_buf: wgpu::Buffer,
-    pub vertex_buf: wgpu::Buffer,
-    pub tessellation_buf: VertexBuffers<VsInput, u16>,
+    globals_buf: wgpu::Buffer,
+    index_buf: wgpu::Buffer,
+    vertex_buf: wgpu::Buffer,
+    tessellation_buf: VertexBuffers<VsInput, u16>,
 
-    pub bind_group: wgpu::BindGroup,
-    pub pipeline: wgpu::RenderPipeline,
+    bind_group: wgpu::BindGroup,
+    pipeline: wgpu::RenderPipeline,
+
+    msaa_tex: wgpu::Texture,
+    msaa_view: wgpu::TextureView,
 }
 
 impl CircleShader {
     #[allow(clippy::too_many_lines)]
-    pub fn new(
+    pub(crate) fn new(
         wgpu: &GraphicsContext,
         prims_buf: &wgpu::Buffer,
+        screen: UVec2,
     ) -> Result<Self, VertexShaderError> {
         let mut tessellation_buf: VertexBuffers<_, u16> = VertexBuffers::new();
         let mut tessellator = FillTessellator::new();
@@ -92,20 +100,20 @@ impl CircleShader {
         let device = &wgpu.device;
 
         let globals_buf = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("vs::globals"),
+            label: Some("circle/buffer:globals"),
             size: std::mem::size_of::<VsGlobals>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
         let index_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("vs::index_buf"),
+            label: Some("circle/buffer:index"),
             contents: bytemuck::cast_slice(&tessellation_buf.indices),
             usage: wgpu::BufferUsages::INDEX,
         });
 
         let vertex_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("vs::vertex_buf"),
+            label: Some("circle/buffer:vertex"),
             contents: bytemuck::cast_slice(&tessellation_buf.vertices),
             usage: wgpu::BufferUsages::VERTEX,
         });
@@ -114,7 +122,7 @@ impl CircleShader {
         let vs = device.create_shader_module(super::SHADER.clone());
 
         let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            label: Some("physics/vertex/bindgroup_layout"),
+            label: Some("circle/bindgroup_layout"),
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
@@ -140,7 +148,7 @@ impl CircleShader {
         });
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("physics/vertex/bindgroup"),
+            label: Some("circle/bindgroup"),
             layout: &bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
@@ -156,7 +164,7 @@ impl CircleShader {
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[Some(&bind_group_layout)],
-            label: Some("physics/vertex/pipeline_layout"),
+            label: Some("circle/pipeline_layout"),
             immediate_size: 0,
         });
 
@@ -167,7 +175,7 @@ impl CircleShader {
         })];
 
         let pipeline_desc = wgpu::RenderPipelineDescriptor {
-            label: Some("physics/vertex/pipeline"),
+            label: Some("circle/pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &vs,
@@ -206,9 +214,26 @@ impl CircleShader {
 
         let pipeline = device.create_render_pipeline(&pipeline_desc);
 
+        let msaa_tex = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("circle/texture:msaa"),
+            size: wgpu::Extent3d {
+                width: screen.x,
+                height: screen.y,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 4,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu.config.format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+
+        let msaa_view = msaa_tex.create_view(&wgpu::TextureViewDescriptor::default());
+
         Ok(CircleShader {
             globals: VsGlobals {
-                resolution: Vec2::ZERO,
+                resolution: UVec2::ZERO,
                 scroll: Vec2::ZERO,
                 zoom: 1.0,
                 ..VsGlobals::default()
@@ -219,12 +244,39 @@ impl CircleShader {
             tessellation_buf,
             bind_group,
             pipeline,
+            msaa_tex,
+            msaa_view,
         })
     }
 
-    pub fn update(&mut self, wgpu: &GraphicsContext, radius: f32) -> Result<(), VertexShaderError> {
-        let device = &wgpu.device;
+    pub(crate) fn resize(&mut self, ctx: &GraphicsContext, screen: UVec2) {
+        self.globals.resolution = screen;
 
+        self.msaa_tex = ctx.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("circle/texture:msaa"),
+            size: wgpu::Extent3d {
+                width: screen.x,
+                height: screen.y,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 4,
+            dimension: wgpu::TextureDimension::D2,
+            format: self.msaa_tex.format(),
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+
+        self.msaa_view = self
+            .msaa_tex
+            .create_view(&wgpu::TextureViewDescriptor::default());
+    }
+
+    pub(crate) fn retesselate(
+        &mut self,
+        ctx: &GraphicsContext,
+        radius: f32,
+    ) -> Result<(), VertexShaderError> {
         let mut tessellation_buf = VertexBuffers::new();
         let mut tessellator = FillTessellator::new();
 
@@ -237,22 +289,70 @@ impl CircleShader {
             )
             .context(TessellationSnafu)?;
 
-        let init_ibuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("index buffer init"),
-            contents: bytemuck::cast_slice(&tessellation_buf.indices),
-            usage: wgpu::BufferUsages::INDEX,
-        });
+        let index_buf = ctx
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("circle/buffer:index"),
+                contents: bytemuck::cast_slice(&tessellation_buf.indices),
+                usage: wgpu::BufferUsages::INDEX,
+            });
 
-        let init_vbuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("vertex buffer init"),
-            contents: bytemuck::cast_slice(&tessellation_buf.vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
+        let vertex_buf = ctx
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("circle/buffer:vertex"),
+                contents: bytemuck::cast_slice(&tessellation_buf.vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
 
-        self.index_buf = init_ibuf;
-        self.vertex_buf = init_vbuf;
+        self.index_buf = index_buf;
+        self.vertex_buf = vertex_buf;
         self.tessellation_buf = tessellation_buf;
 
         Ok(())
+    }
+
+    pub(crate) fn draw(
+        &self,
+        ctx: &GraphicsContext,
+        encoder: &mut wgpu::CommandEncoder,
+        surface_view: &wgpu::TextureView,
+        udata: &PhysicsUniformData,
+    ) {
+        ctx.queue
+            .write_buffer(&self.globals_buf, 0, bytemuck::cast_slice(&[self.globals]));
+
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: None,
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &self.msaa_view,
+                    resolve_target: Some(surface_view),
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: None,
+                occlusion_query_set: None,
+                timestamp_writes: None,
+                multiview_mask: None,
+            });
+
+            pass.set_pipeline(&self.pipeline);
+            pass.set_bind_group(0, &self.bind_group, &[]);
+            pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint16);
+            pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
+            pass.draw_indexed(
+                0..self.index_buf.size() as u32 / 2,
+                0,
+                0..udata.num_particles(),
+            );
+        }
+    }
+
+    pub(crate) fn lease_zoom(&mut self) -> &mut f32 {
+        &mut self.globals.zoom
     }
 }

@@ -56,6 +56,8 @@ impl Panel {
                 ui.add(Slider::new(&mut state.gfx.steps_per_frame, 1..=5).text("Steps per Frame"))
                     .changed();
 
+                ui.add(Slider::new(circles.lease_zoom(), 0.5..=1.0).text("Zoom"));
+
                 ui.add_space(25.0);
                 ui.label(RichText::new("Physics Settings").size(TEXT_SIZE).strong());
 
@@ -74,9 +76,12 @@ impl Panel {
                         .text("Smoothing Radius"),
                 );
 
-                ui.add(
-                    Slider::new(&mut settings.target_density, 0.1..=175.0).text("Target Density"),
-                );
+                reset |= ui
+                    .add(
+                        Slider::new(&mut settings.target_density, 0.1..=175.0)
+                            .text("Target Density"),
+                    )
+                    .changed();
 
                 ui.add(
                     Slider::new(&mut settings.pressure_multiplier, 1.0..=700.0)
@@ -165,7 +170,7 @@ impl Panel {
             }
 
             if retessellate {
-                circles.update(ctx, settings.particle_radius).unwrap();
+                circles.retesselate(ctx, settings.particle_radius).unwrap();
             }
 
             if reset {
