@@ -45,7 +45,7 @@ pub struct GraphicsContext {
 }
 
 impl GraphicsContext {
-    pub async fn new(window: Window, window_size: Vec2) -> Result<Self, GraphicsInitError> {
+    pub async fn new(window: Window, screen: UVec2) -> Result<Self, GraphicsInitError> {
         info!("Initializing renderer");
 
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -60,10 +60,8 @@ impl GraphicsContext {
 
         let window = Arc::new(window);
 
-        let Vec2 { x: winx, y: winy } = window_size;
-
         #[allow(unused_must_use)]
-        window.request_inner_size(PhysicalSize::new(winx as i32, winy as i32));
+        window.request_inner_size(PhysicalSize::new(screen.x, screen.y));
 
         let surface = instance
             .create_surface(Arc::clone(&window))
@@ -104,8 +102,8 @@ impl GraphicsContext {
         let surface_cfg = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: *texture_fmt,
-            width: winx as u32,
-            height: winy as u32,
+            width: screen.x,
+            height: screen.y,
             present_mode: wgpu::PresentMode::Fifo,
             desired_maximum_frame_latency: 1,
             alpha_mode: caps.alpha_modes[0],

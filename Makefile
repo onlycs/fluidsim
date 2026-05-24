@@ -6,6 +6,7 @@ linux:
 	mkdir -p dist
 	cargo build --target x86_64-unknown-linux-gnu --release
 	mv target/x86_64-unknown-linux-gnu/release/fluidsim dist/fluidsim-linux-x86_64
+	patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 dist/fluidsim-linux-x86_64
 
 win:
 	mkdir -p dist

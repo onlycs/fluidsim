@@ -1,6 +1,5 @@
 use std::sync::Mutex;
 
-use glam::UVec2;
 use glyphon::{
     Attrs, Buffer, Cache, Color, FontSystem, Metrics, Resolution, SwashCache, TextArea, TextAtlas,
     TextBounds, TextRenderer, Viewport, Weight,

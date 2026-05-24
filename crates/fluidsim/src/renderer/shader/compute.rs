@@ -21,6 +21,10 @@ impl PhysicsUniformData {
     pub(crate) fn num_particles(&self) -> u32 {
         self.settings.num_particles
     }
+
+    pub(crate) fn particle_radius(&self) -> f32 {
+        self.settings.particle_radius
+    }
 }
 
 pub(crate) struct PhysicsShader {

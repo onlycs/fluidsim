@@ -7,7 +7,6 @@ mod performance;
 mod shader;
 mod state;
 
-use glam::UVec2;
 use wgpu::CurrentSurfaceTexture;
 use winit::{
     application::ApplicationHandler,
@@ -207,24 +206,24 @@ impl Renderer {
     }
 
     async fn init(&mut self, window: Window) -> Result<(), RendererInitError> {
-        let size = window.inner_size().to_vec2();
+        let size = window.inner_size().to_uvec2();
 
         let panel = Panel::default();
-        let gfx = GraphicsContext::new(window, size)
+        let ctx = GraphicsContext::new(window, size)
             .await
             .context(GraphicsInitSnafu)?;
 
-        let phyiscs = PhysicsShader::new(&gfx.device, &gfx.queue);
-        let circle = CircleShader::new(&gfx, phyiscs.prims(), size.as_uvec2())
+        let phyiscs = PhysicsShader::new(&ctx.device, &ctx.queue);
+        let vs = CircleShader::new(&ctx, phyiscs.prims(), size, &phyiscs.udata)
             .context(VertexShaderInitSnafu)?;
-        let egui = UiRenderer::new(&gfx);
-        let perf = PerformanceDisplay::new(&gfx);
+        let ui = UiRenderer::new(&ctx);
+        let perf = PerformanceDisplay::new(&ctx);
 
         *self = Self::Init(RendererInit {
-            ctx: gfx,
+            ctx,
             physics: phyiscs,
-            vertex: circle,
-            ui: egui,
+            vertex: vs,
+            ui,
             perf,
             panel,
             input: InputProcessor::default(),

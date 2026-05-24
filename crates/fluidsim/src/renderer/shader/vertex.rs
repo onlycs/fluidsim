@@ -1,4 +1,3 @@
-use glam::UVec2;
 use gpu_shared::SCALE;
 use lyon::{
     geom::Point,
@@ -84,6 +83,7 @@ impl CircleShader {
         wgpu: &GraphicsContext,
         prims_buf: &wgpu::Buffer,
         screen: UVec2,
+        udata: &PhysicsUniformData,
     ) -> Result<Self, VertexShaderError> {
         let mut tessellation_buf: VertexBuffers<_, u16> = VertexBuffers::new();
         let mut tessellator = FillTessellator::new();
@@ -91,7 +91,7 @@ impl CircleShader {
         tessellator
             .tessellate_circle(
                 Point::new(0., 0.),
-                SimSettings::default().particle_radius * SCALE,
+                udata.particle_radius() * SCALE,
                 &FillOptions::default(),
                 &mut BuffersBuilder::new(&mut tessellation_buf, WithId(0)),
             )

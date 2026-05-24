@@ -43,16 +43,17 @@
           rustToolchain
           sccache
           mold
-          wasm-pack
 
           clang
-          lld
-          cargo-xwin
+          patchelf
 
-          zig
+          cargo-xwin
+          lld
+
           cargo-zigbuild
-          zip
           osxsdk
+          zig
+          zip
 
           nil
           nixd
