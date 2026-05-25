@@ -9,3 +9,6 @@ spirv-std = { git = "https://github.com/rust-gpu/rust-gpu" }
 
 [profile.dev.build-override]
 opt-level = 3
+
+[profile.release]
+strip = true
