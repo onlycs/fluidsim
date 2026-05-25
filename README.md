@@ -18,9 +18,8 @@ to remove the quarantine attribute. You should then be able to double-click on i
 
 ### Linux
 
-A release binary is available from the [releases page](https://github.com/onlycs/fluidsim/releases). Make sure the following are available somewhere
+A release binary (with `musl`) is available from the [releases page](https://github.com/onlycs/fluidsim/releases). Make sure the following are available somewhere
 
-- `libgcc`, `glibc`, and friends
 - `libwayland` and friends
 - `libvulkan` and Mesa ICDs
 - `libxcb` and friends

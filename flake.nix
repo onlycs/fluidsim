@@ -45,15 +45,14 @@
           mold
 
           clang
-          patchelf
-
-          cargo-xwin
           lld
 
-          cargo-zigbuild
-          osxsdk
+          cargo-xwin
+
           zig
+          cargo-zigbuild
           zip
+          osxsdk
 
           nil
           nixd
