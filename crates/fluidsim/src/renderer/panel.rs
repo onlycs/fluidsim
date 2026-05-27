@@ -1,10 +1,11 @@
 use egui::{Button, RichText, Slider};
+use glam::Quat;
 
 use crate::{
     prelude::*,
     renderer::{
         graphics::GraphicsContext,
-        shader::{compute::PhysicsShader, vertex::CircleShader},
+        shader::{lines::LineShader, physics::PhysicsShader},
         state::SimulationState,
     },
 };
@@ -25,6 +26,16 @@ impl Default for Panel {
     }
 }
 
+fn degrees(rad: &mut f32) -> impl FnMut(Option<f64>) -> f64 + '_ {
+    move |v| {
+        if let Some(v) = v {
+            *rad = v.to_radians() as f32;
+        }
+
+        f64::from(rad.to_degrees())
+    }
+}
+
 impl Panel {
     #[allow(clippy::too_many_lines)]
     pub fn update<'a>(
@@ -32,13 +43,13 @@ impl Panel {
         ctx: &'a GraphicsContext,
         state: &'a mut SimulationState,
         physics: &'a mut PhysicsShader,
-        circles: &'a mut CircleShader,
+        lines: &'a mut LineShader,
     ) -> impl FnMut(&mut egui::Ui) + 'a {
         |ui: &mut egui::Ui| {
             let settings = physics.lease_panel();
 
             let mut reset = false;
-            let mut retessellate = false;
+            let mut reline = false;
 
             if !self.show {
                 return;
@@ -56,7 +67,10 @@ impl Panel {
                 ui.add(Slider::new(&mut state.gfx.steps_per_frame, 1..=5).text("Steps per Frame"))
                     .changed();
 
-                ui.add(Slider::new(circles.lease_zoom(), 0.5..=1.0).text("Zoom"));
+                ui.add(
+                    Slider::from_get_set(20.0..=120.0, degrees(&mut state.player.fov)).text("FoV"),
+                )
+                .changed();
 
                 ui.add_space(25.0);
                 ui.label(RichText::new("Physics Settings").size(TEXT_SIZE).strong());
@@ -114,28 +128,72 @@ impl Panel {
                 ui.add_space(25.0);
                 ui.label(RichText::new("Initial Conditions").size(TEXT_SIZE).strong());
 
-                reset |= ui
-                    .add(
-                        Slider::new(&mut state.init.particles.x, 1..=100)
-                            .integer()
-                            .text("Particles X"),
-                    )
-                    .changed();
+                ui.collapsing("Particle Count", |ui| {
+                    reset |= ui
+                        .add(Slider::new(&mut state.init.particles.x, 1..=32).text("Particles X"))
+                        .changed();
 
-                reset |= ui
-                    .add(
-                        Slider::new(&mut state.init.particles.y, 1..=100)
-                            .integer()
-                            .text("Particles Y"),
-                    )
-                    .changed();
+                    reset |= ui
+                        .add(Slider::new(&mut state.init.particles.y, 1..=32).text("Particles Y"))
+                        .changed();
+
+                    reset |= ui
+                        .add(Slider::new(&mut state.init.particles.z, 1..=32).text("Particles Z"))
+                        .changed();
+
+                    ui.add_space(5.0);
+                });
+
+                ui.collapsing("Boundary Size", |ui| {
+                    reline |= ui
+                        .add(Slider::new(&mut state.init.box_size.x, 0.0..=16.0).text("Boundary X"))
+                        .changed();
+
+                    reline |= ui
+                        .add(Slider::new(&mut state.init.box_size.y, 0.0..=16.0).text("Boundary Y"))
+                        .changed();
+
+                    reline |= ui
+                        .add(Slider::new(&mut state.init.box_size.z, 0.0..=16.0).text("Boundary Z"))
+                        .changed();
+
+                    ui.add_space(5.0);
+                });
+
+                ui.collapsing("Boundary Rotation", |ui| {
+                    let (mut x, mut y, mut z) = state.init.box_quat.to_euler(glam::EulerRot::XYZ);
+
+                    reline |= ui
+                        .add(
+                            Slider::from_get_set(-180.0..=180.0, degrees(&mut x))
+                                .text("Roll (About X)"),
+                        )
+                        .changed();
+
+                    reline |= ui
+                        .add(
+                            Slider::from_get_set(-180.0..=180.0, degrees(&mut y))
+                                .text("Pitch (About Y)"),
+                        )
+                        .changed();
+
+                    reline |= ui
+                        .add(
+                            Slider::from_get_set(-180.0..=180.0, degrees(&mut z))
+                                .text("Yaw (About Z)"),
+                        )
+                        .changed();
+
+                    state.init.box_quat = Quat::from_euler(glam::EulerRot::XYZ, x, y, z);
+
+                    ui.add_space(5.0);
+                });
 
                 reset |= ui
                     .add(Slider::new(&mut state.init.gap, 0.0..=3.0).text("Initial Gap"))
                     .changed();
 
-                retessellate |= ui
-                    .add(Slider::new(&mut settings.particle_radius, 0.0..=1.0).text("Radius"))
+                ui.add(Slider::new(&mut settings.particle_radius, 0.0..=1.0).text("Radius"))
                     .changed();
 
                 ui.add_space(25.0);
@@ -147,7 +205,7 @@ impl Panel {
                 {
                     reset = true;
                     *settings = SimSettings {
-                        window_size: settings.window_size,
+                        box_size: settings.box_size,
                         ..SimSettings::default()
                     }
                 }
@@ -169,12 +227,12 @@ impl Panel {
                 settings.particle_radius = 0.01;
             }
 
-            if retessellate {
-                circles.retesselate(ctx, settings.particle_radius).unwrap();
+            if reset || reline {
+                physics.reset(ctx, state);
             }
 
-            if reset {
-                physics.reset(ctx, state);
+            if reline {
+                lines.rebuild(&ctx.device, state.init.box_size, state.init.box_quat);
             }
         }
     }

@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use bytemuck::NoUninit;
 use gpu_shared::{ARRAY_LEN, MouseState};
 
-use crate::{prelude::*, renderer::shader::vertex::VsCirclePrimitive};
+use crate::{prelude::*, renderer::shader::circles::VsCirclePrimitive};
 
 pub struct BufferBinding<A> {
     pub buffer: Arc<wgpu::Buffer>,
@@ -145,9 +145,9 @@ buffers!(
     }
 
     group physics(Physics) {
-        positions([[f32; 2]; ARRAY_LEN]): storage; COPY_SRC | COPY_DST,
-        predictions([[f32; 2]; ARRAY_LEN]): storage; COPY_SRC | COPY_DST,
-        velocities([[f32; 2]; ARRAY_LEN]): storage; COPY_SRC | COPY_DST,
+        positions([[f32; 4]; ARRAY_LEN]): storage; COPY_SRC | COPY_DST, // use vec4 for alignment/padding reasons, [x, y, z, w] where w is unused
+        predictions([[f32; 4]; ARRAY_LEN]): storage; COPY_SRC | COPY_DST,
+        velocities([[f32; 4]; ARRAY_LEN]): storage; COPY_SRC | COPY_DST,
         densities([[f32; 2]; ARRAY_LEN]): storage; COPY_SRC | COPY_DST,
     }
 

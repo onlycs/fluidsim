@@ -8,7 +8,8 @@
     clippy::cast_possible_wrap,
     clippy::result_large_err,
     clippy::wildcard_imports,
-    clippy::large_enum_variant
+    clippy::large_enum_variant,
+    clippy::many_single_char_names
 )]
 #![cfg_attr(
     all(not(debug_assertions), target_os = "windows"),

@@ -3,10 +3,11 @@ mod egui;
 mod graphics;
 mod input;
 mod panel;
-mod performance;
 mod shader;
 mod state;
+mod text;
 
+use glam::{Quat, Vec3};
 use wgpu::CurrentSurfaceTexture;
 use winit::{
     application::ApplicationHandler,
@@ -19,17 +20,13 @@ use winit::{
 use crate::{
     prelude::*,
     renderer::{
-        compute::PhysicsShader,
         egui::UiRenderer,
         graphics::{GraphicsContext, GraphicsInitError},
         input::{HumanInput, InputProcessor},
         panel::Panel,
-        performance::PerformanceDisplay,
-        shader::{
-            compute,
-            vertex::{CircleShader, VertexShaderError},
-        },
+        shader::{circles::CircleShader, lines::LineShader, physics::PhysicsShader},
         state::SimulationState,
+        text::PerformanceDisplay,
     },
 };
 
@@ -48,9 +45,9 @@ pub(crate) enum DrawError {
         location: Location,
     },
 
-    #[snafu(display("At {location}: performance display error\n{source}"))]
+    #[snafu(display("At {location}: text display error\n{source}"))]
     PerformanceDisplay {
-        source: performance::TextError,
+        source: text::TextError,
         #[snafu(implicit)]
         location: Location,
     },
@@ -61,13 +58,6 @@ pub(crate) enum RendererInitError {
     #[snafu(display("At {location}: graphics init error\n{source}"))]
     GraphicsInit {
         source: GraphicsInitError,
-        #[snafu(implicit)]
-        location: Location,
-    },
-
-    #[snafu(display("At {location}: vertex shader init error\n{source}"))]
-    VertexShaderInit {
-        source: VertexShaderError,
         #[snafu(implicit)]
         location: Location,
     },
@@ -93,7 +83,8 @@ pub(crate) enum ResumeError {
 pub(crate) struct RendererInit {
     ctx: GraphicsContext,
     physics: PhysicsShader,
-    vertex: CircleShader,
+    circle: CircleShader,
+    lines: LineShader,
 
     ui: UiRenderer,
     panel: Panel,
@@ -108,9 +99,8 @@ impl RendererInit {
         let scale = self.ctx.window.scale_factor() as f32;
 
         // update subsystems
-        self.physics.resize(size, &self.ctx, &mut self.state);
         self.perf.resize(size, scale);
-        self.vertex.resize(&self.ctx, size);
+        self.circle.resize(&self.ctx, size);
 
         // reconfigure surface
         self.ctx.config.width = size.x;
@@ -156,28 +146,33 @@ impl RendererInit {
         }
 
         // draw particles
-        self.vertex
-            .draw(&self.ctx, &mut encoder, &surface_view, &self.physics.udata);
+        self.circle.draw(
+            &self.ctx,
+            &mut encoder,
+            &surface_view,
+            &self.state,
+            &self.physics.udata,
+            &self.lines,
+            self.ctx.window.inner_size().to_uvec2(),
+        );
 
         // draw fps counter
         self.perf
-            .render(&self.ctx, &mut encoder, &surface_view)
+            .render(&self.ctx, &mut encoder, &surface_view, &self.state)
             .context(PerformanceDisplaySnafu)?;
 
         // draw egui
-        {
-            self.ui.draw(
+        self.ui.draw(
+            &self.ctx,
+            &mut encoder,
+            &surface_view,
+            self.panel.update(
                 &self.ctx,
-                &mut encoder,
-                &surface_view,
-                self.panel.update(
-                    &self.ctx,
-                    &mut self.state,
-                    &mut self.physics,
-                    &mut self.vertex,
-                ),
-            );
-        }
+                &mut self.state,
+                &mut self.physics,
+                &mut self.lines,
+            ),
+        );
 
         queue.submit(Some(encoder.finish()));
         surface_tex.present();
@@ -213,21 +208,30 @@ impl Renderer {
             .await
             .context(GraphicsInitSnafu)?;
 
-        let phyiscs = PhysicsShader::new(&ctx.device, &ctx.queue);
-        let vs = CircleShader::new(&ctx, phyiscs.prims(), size, &phyiscs.udata)
-            .context(VertexShaderInitSnafu)?;
+        let mut phyiscs = PhysicsShader::new(&ctx.device, &ctx.queue);
+        let vs = CircleShader::new(&ctx, phyiscs.buffers(), size);
         let ui = UiRenderer::new(&ctx);
         let perf = PerformanceDisplay::new(&ctx);
+        let mut state = SimulationState::new();
+
+        phyiscs.reset(&ctx, &mut state);
 
         *self = Self::Init(RendererInit {
-            ctx,
             physics: phyiscs,
-            vertex: vs,
+            lines: LineShader::new(
+                &ctx.device,
+                &ctx.config.format,
+                vs.globals_buf(),
+                state.init.box_size,
+                state.init.box_quat,
+            ),
+            circle: vs,
+            ctx,
             ui,
             perf,
             panel,
             input: InputProcessor::default(),
-            state: SimulationState::new(),
+            state,
         });
 
         Ok(())
@@ -262,6 +266,44 @@ impl ApplicationHandler for Renderer {
                         KeyCode::KeyC => this.panel.toggle_self(),
                         KeyCode::KeyH => this.panel.toggle_help(),
                         KeyCode::KeyP => this.perf.toggle(),
+                        KeyCode::KeyW => {
+                            let q = this.state.player.q_yaw();
+                            this.state.player.translate += q * Vec3::new(0.0, 0.0, -1.0) * 0.5;
+                        }
+                        KeyCode::KeyS => {
+                            let q = this.state.player.q_yaw();
+                            this.state.player.translate += q * Vec3::new(0.0, 0.0, 1.0) * 0.5;
+                        }
+                        KeyCode::KeyA => {
+                            let q = this.state.player.q_yaw();
+                            this.state.player.translate += q * Vec3::new(-1.0, 0.0, 0.0) * 0.5;
+                        }
+                        KeyCode::KeyD => {
+                            let q = this.state.player.q_yaw();
+                            this.state.player.translate += q * Vec3::new(1.0, 0.0, 0.0) * 0.5;
+                        }
+                        KeyCode::ShiftLeft | KeyCode::ShiftRight => {
+                            this.state.player.translate.y += 0.5;
+                        }
+                        KeyCode::ControlLeft | KeyCode::ControlRight => {
+                            this.state.player.translate.y -= 0.5;
+                        }
+                        KeyCode::Numpad8 => {
+                            let rot = Quat::from_rotation_x(0.1);
+                            this.state.player.q *= rot;
+                        }
+                        KeyCode::Numpad2 => {
+                            let rot = Quat::from_rotation_x(-0.1);
+                            this.state.player.q *= rot;
+                        }
+                        KeyCode::Numpad4 => {
+                            let rot = Quat::from_rotation_y(0.1);
+                            this.state.player.q = rot * this.state.player.q;
+                        }
+                        KeyCode::Numpad6 => {
+                            let rot = Quat::from_rotation_y(-0.1);
+                            this.state.player.q = rot * this.state.player.q;
+                        }
                         _ => {}
                     }
                 }

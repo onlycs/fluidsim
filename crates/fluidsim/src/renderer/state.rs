@@ -1,3 +1,7 @@
+use std::f32;
+
+use glam::{Mat4, Quat, Vec3};
+
 use crate::prelude::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -29,10 +33,35 @@ impl TimeState {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct PlayerTransform {
+    pub translate: Vec3,
+    pub q: Quat,
+    pub fov: f32, // vertical field of view in radians
+}
+
+impl PlayerTransform {
+    pub(crate) fn view_matrix(&self) -> Mat4 {
+        (Mat4::from_translation(self.translate) * Mat4::from_quat(self.q)).inverse()
+    }
+
+    pub(crate) fn projection_matrix(&self, screen: UVec2) -> Mat4 {
+        let screen = screen.as_vec2();
+        Mat4::perspective_rh(self.fov, screen.x / screen.y, 0.01, 200.0)
+    }
+
+    pub(crate) fn q_yaw(&self) -> Quat {
+        let fwd = self.q * Vec3::Z;
+        let yaw = fwd.z.atan2(fwd.x);
+        Quat::from_rotation_y(yaw)
+    }
+}
+
 pub(crate) struct SimulationState {
     pub(crate) time: TimeState,
     pub(crate) gfx: GraphicsSettings,
     pub(crate) init: InitialConditions,
+    pub(crate) player: PlayerTransform,
 }
 
 impl SimulationState {
@@ -41,6 +70,11 @@ impl SimulationState {
             gfx: GraphicsSettings::default(),
             init: InitialConditions::default(),
             time: TimeState::Paused,
+            player: PlayerTransform {
+                translate: Vec3::new(12.69, 5.29, 11.57),
+                q: Quat::from_xyzw(-0.05, 0.30, 0.00, 0.95),
+                fov: f32::consts::FRAC_PI_2,
+            },
         }
     }
 

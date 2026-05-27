@@ -1,4 +1,5 @@
-use glam::{UVec2, uvec2};
+use glam::{Quat, UVec3, Vec3};
+use gpu_shared::{DEFAULT_BOX_SIZE, DEFAULT_PARTICLES};
 
 use crate::prelude::*;
 
@@ -21,14 +22,18 @@ impl Default for GraphicsSettings {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct InitialConditions {
-    pub particles: UVec2,
+    pub particles: UVec3,
+    pub box_size: Vec3,
+    pub box_quat: Quat,
     pub gap: f32,
 }
 
 impl Default for InitialConditions {
     fn default() -> Self {
         Self {
-            particles: uvec2(60, 60),
+            particles: DEFAULT_PARTICLES,
+            box_size: DEFAULT_BOX_SIZE,
+            box_quat: Quat::IDENTITY,
             gap: 0.05,
         }
     }

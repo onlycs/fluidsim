@@ -1,35 +1,42 @@
 use gpu_shared::ARRAY_LEN;
 use spirv_std::{
-    glam::{IVec2, Vec2, ivec2},
+    glam::{IVec2, IVec3, Vec2, Vec3, ivec3},
     num_traits::real::Real,
 };
 
-pub const NEIGHBORS: [IVec2; 9] = [
-    ivec2(-1, -1),
-    ivec2(-1, 0),
-    ivec2(-1, 1),
-    ivec2(0, -1),
-    ivec2(0, 0),
-    ivec2(0, 1),
-    ivec2(1, -1),
-    ivec2(1, 0),
-    ivec2(1, 1),
-];
+pub const NEIGHBORS: [IVec3; 27] = const {
+    let mut neighbors = [ivec3(0, 0, 0); 27];
+    const OFFSETS: [i32; 3] = [-1, 0, 1];
+
+    let mut x = 0;
+    let mut idx = 0;
+    while x < 3 {
+        let mut y = 0;
+        while y < 3 {
+            let mut z = 0;
+            while z < 3 {
+                neighbors[idx] = ivec3(OFFSETS[x], OFFSETS[y], OFFSETS[z]);
+                z += 1;
+                idx += 1;
+            }
+            y += 1;
+        }
+        x += 1;
+    }
+
+    neighbors
+};
 
 /// Convert position to grid cell coordinates
-pub fn pos_to_cell(pos: Vec2, cell_size: f32) -> IVec2 {
-    let x = (pos.x / cell_size).floor();
-    let y = (pos.y / cell_size).floor();
-    ivec2(x as i32, y as i32)
+pub fn pos_to_cell(pos: Vec3, cell_size: f32) -> IVec3 {
+    (pos / cell_size).floor().as_ivec3()
 }
 
 /// Hash a cell coordinate to a hash value
-pub fn cell_hash(IVec2 { x, y }: IVec2) -> u32 {
-    const PX: i32 = 17;
-    const PY: i32 = 31;
-    // Use wrapping operations to avoid overflow issues
-    let h = x.wrapping_mul(PX).wrapping_add(y.wrapping_mul(PY));
-    h as u32
+pub fn cell_hash(IVec3 { x, y, z }: IVec3) -> u32 {
+    const P: IVec3 = ivec3(391, 193, 719); // primes
+    let hash = (x * P.x) ^ (y * P.y) ^ (z * P.z);
+    hash as u32
 }
 
 /// Convert hash to key (modulo num_particles for bucket assignment)
@@ -38,13 +45,13 @@ pub fn key_from_hash(hash: u32, num_particles: u32) -> u32 {
 }
 
 /// Convert cell directly to key
-pub fn cell_key(cell: IVec2, num_particles: u32) -> u32 {
+pub fn cell_key(cell: IVec3, num_particles: u32) -> u32 {
     let hash = cell_hash(cell);
     key_from_hash(hash, num_particles)
 }
 
 /// Convert position directly to key (convenience function)
-pub fn pos_to_key(pos: Vec2, cell_size: f32, num_particles: u32) -> u32 {
+pub fn pos_to_key(pos: Vec3, cell_size: f32, num_particles: u32) -> u32 {
     cell_key(pos_to_cell(pos, cell_size), num_particles)
 }
 

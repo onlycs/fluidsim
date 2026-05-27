@@ -7,7 +7,7 @@ use winit::{
     keyboard::{KeyCode, PhysicalKey},
 };
 
-use crate::renderer::shader::compute::PhysicsShader;
+use crate::renderer::shader::physics::PhysicsShader;
 
 #[derive(Default)]
 pub(crate) struct InputProcessor {

@@ -1,13 +1,14 @@
 #![no_std]
 #![allow(unexpected_cfgs)]
 
-#[cfg(target_arch = "spirv")]
-use spirv_std::glam::{UVec2, Vec2, Vec4};
 #[cfg(not(target_arch = "spirv"))]
-use {
-    bytemuck::{Pod, Zeroable},
-    glam::{UVec2, Vec2, Vec4},
-};
+use bytemuck::{Pod, Zeroable};
+use glam::{Mat4, UVec2, UVec3, Vec2, Vec3, Vec4};
+#[cfg(target_arch = "spirv")]
+use spirv_std::glam;
+
+pub const DEFAULT_BOX_SIZE: Vec3 = Vec3::new(10., 8., 6.);
+pub const DEFAULT_PARTICLES: UVec3 = UVec3::new(15, 15, 15);
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(not(target_arch = "spirv"), derive(Pod, Zeroable))]
@@ -33,7 +34,10 @@ pub struct Settings {
     pub boundary_particles: u32,
     pub particle_radius: f32,
 
-    pub window_size: UVec2,
+    pub _pad0: f32,
+    pub _pad1: f32,
+    pub box_size: Vec3,
+    pub _pad2: f32,
 }
 
 impl Default for Settings {
@@ -54,12 +58,15 @@ impl Default for Settings {
             interaction_radius: 4.0,
             interaction_strength: 65.0,
 
-            window_size: UVec2::new(1200, 800),
-            num_particles: 60 * 60,
+            box_size: DEFAULT_BOX_SIZE,
+            num_particles: DEFAULT_PARTICLES.x * DEFAULT_PARTICLES.y * DEFAULT_PARTICLES.z,
             boundary_particles: 0,
 
             mass: 1.0,
             particle_radius: 0.05,
+            _pad0: 0.0,
+            _pad1: 0.0,
+            _pad2: 0.0,
         }
     }
 }
@@ -113,22 +120,28 @@ impl MouseState {
 #[repr(C)]
 pub struct Primitive {
     pub color: Vec4,
-    pub translate: Vec2,
+    pub translate: Vec3,
     pub z_index: i32,
-    pub _pad: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[cfg_attr(not(target_arch = "spirv"), derive(Pod, Zeroable))]
 #[repr(C)]
 pub struct Globals {
+    pub view: Mat4,
+    pub projection: Mat4,
     pub resolution: UVec2,
-    pub scroll: Vec2,
-    pub zoom: f32,
-    pub _pad1: f32,
-    pub _pad2: Vec2,
+    pub _pad: Vec2,
+}
+
+#[derive(Copy, Clone)]
+#[cfg_attr(not(target_arch = "spirv"), derive(Pod, Zeroable))]
+#[repr(C)]
+pub struct LineVertex {
+    pub position: [f32; 3],
+    pub color: [f32; 3],
 }
 
 pub const SCALE: f32 = 100.0;
-pub const ARRAY_LEN: usize = 65536;
+pub const ARRAY_LEN: usize = 262144;
 pub const WORKGROUP_SIZE: u32 = 256;
