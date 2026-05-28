@@ -4,14 +4,18 @@
 
 ### Windows
 
-Install the [redist](https://aka.ms/vs/17/release/vc_redist.x64.exe) first.
+You may need to install the [redist](https://aka.ms/vs/17/release/vc_redist.x64.exe) first.
+
+If you've ever played a 3d video game or coded in a not-interpreted language, this is probably already on your computer.
+
+After that, grab a release binary from the [releases page](https://github.com/onlycs/fluidsim/releases).
 
 ### MacOS
 
 Download and extract the provided zip from the [releases page](https://github.com/onlycs/fluidsim/releases). Open a terminal and run
 
 ```bash
-xattr -cr /path/to/fluidsim.app
+xattr -cr /path/to/FluidSim.app
 ```
 
 to remove the quarantine attribute. You should then be able to double-click on it to run it.
