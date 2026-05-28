@@ -69,6 +69,7 @@ impl PhysicsShader {
     pub(crate) fn reset(&mut self, ctx: &GraphicsContext, sim: &mut SimulationState) {
         let settings = &mut self.udata.settings;
         settings.box_size = sim.init.box_size;
+        settings.box_quat = sim.init.box_quat;
 
         let nx = sim.init.particles.x;
         let ny = sim.init.particles.y;
@@ -76,6 +77,7 @@ impl PhysicsShader {
         let gap = sim.init.gap;
         let size = settings.particle_radius * 2.0;
         let box_size = settings.box_size;
+        let rot = sim.init.box_quat;
 
         // calculate the position of the top-left particle
         let screen = settings.box_size;
@@ -113,12 +115,14 @@ impl PhysicsShader {
                             continue;
                         }
 
-                        positions[ctr] = [
+                        let p = vec3(
                             tl.x + sprest * i as f32,
                             tl.y + sprest * j as f32,
                             tl.z + sprest * k as f32,
-                            0., // padding for alignment
-                        ];
+                        );
+                        let p = rot * p;
+
+                        positions[ctr] = [p.x, p.y, p.z, 0.]; // padding for alignment
                         ctr += 1;
                     }
                 }
@@ -144,6 +148,7 @@ impl PhysicsShader {
                         rand::random::<f32>() - 0.5,
                     );
                     let pos = topleft + offset + random / 25.;
+                    let pos = rot * pos;
 
                     positions[ctr] = [pos.x, pos.y, pos.z, 0.]; // padding for alignment
                     ctr += 1;

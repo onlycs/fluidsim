@@ -3,7 +3,7 @@
 
 #[cfg(not(target_arch = "spirv"))]
 use bytemuck::{Pod, Zeroable};
-use glam::{Mat4, UVec2, UVec3, Vec2, Vec3, Vec4};
+use glam::{Mat4, Quat, UVec2, UVec3, Vec2, Vec3, Vec4};
 #[cfg(target_arch = "spirv")]
 use spirv_std::glam;
 
@@ -38,6 +38,7 @@ pub struct Settings {
     pub _pad1: f32,
     pub box_size: Vec3,
     pub _pad2: f32,
+    pub box_quat: Quat,
 }
 
 impl Default for Settings {
@@ -59,6 +60,7 @@ impl Default for Settings {
             interaction_strength: 65.0,
 
             box_size: DEFAULT_BOX_SIZE,
+            box_quat: Quat::IDENTITY,
             num_particles: DEFAULT_PARTICLES.x * DEFAULT_PARTICLES.y * DEFAULT_PARTICLES.z,
             boundary_particles: 0,
 

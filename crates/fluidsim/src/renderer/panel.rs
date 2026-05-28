@@ -161,30 +161,30 @@ impl Panel {
                 });
 
                 ui.collapsing("Boundary Rotation", |ui| {
-                    let (mut x, mut y, mut z) = state.init.box_quat.to_euler(glam::EulerRot::XYZ);
+                    let (mut y, mut x, mut z) = state.init.box_quat.to_euler(glam::EulerRot::YXZEx);
 
                     reline |= ui
                         .add(
-                            Slider::from_get_set(-180.0..=180.0, degrees(&mut x))
+                            Slider::from_get_set(-90.0..=90.0, degrees(&mut x))
                                 .text("Roll (About X)"),
                         )
                         .changed();
 
                     reline |= ui
                         .add(
-                            Slider::from_get_set(-180.0..=180.0, degrees(&mut y))
+                            Slider::from_get_set(-90.0..=90.0, degrees(&mut y))
                                 .text("Pitch (About Y)"),
                         )
                         .changed();
 
                     reline |= ui
                         .add(
-                            Slider::from_get_set(-180.0..=180.0, degrees(&mut z))
+                            Slider::from_get_set(-90.0..=90.0, degrees(&mut z))
                                 .text("Yaw (About Z)"),
                         )
                         .changed();
 
-                    state.init.box_quat = Quat::from_euler(glam::EulerRot::XYZ, x, y, z);
+                    state.init.box_quat = Quat::from_euler(glam::EulerRot::YXZEx, y, x, z);
 
                     ui.add_space(5.0);
                 });

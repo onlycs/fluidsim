@@ -491,32 +491,46 @@ pub fn collide(
 
     let idx = id as usize;
     let size = settings.box_size;
+    let rot = settings.box_quat;
     let radius = settings.particle_radius;
+    let damping = settings.collision_damping;
 
-    if positions[idx].x < radius {
-        positions[idx].x = radius;
-        velocities[idx].x *= -settings.collision_damping;
+    let pos = positions[idx].truncate();
+    let vel = velocities[idx].truncate();
+
+    let inv = rot.conjugate();
+    let mut lpos = inv * pos;
+    let mut lvel = inv * vel;
+
+    if lpos.x < radius {
+        lpos.x = radius;
+        lvel.x *= -damping;
+    } else if lpos.x > size.x - radius {
+        lpos.x = size.x - radius;
+        lvel.x *= -damping;
     }
-    if positions[idx].x > size.x - radius {
-        positions[idx].x = size.x - radius;
-        velocities[idx].x *= -settings.collision_damping;
+
+    if lpos.y < radius {
+        lpos.y = radius;
+        lvel.y *= -damping;
+    } else if lpos.y > size.y - radius {
+        lpos.y = size.y - radius;
+        lvel.y *= -damping;
     }
-    if positions[idx].y < radius {
-        positions[idx].y = radius;
-        velocities[idx].y *= -settings.collision_damping;
+
+    if lpos.z < radius {
+        lpos.z = radius;
+        lvel.z *= -damping;
+    } else if lpos.z > size.z - radius {
+        lpos.z = size.z - radius;
+        lvel.z *= -damping;
     }
-    if positions[idx].y > size.y - radius {
-        positions[idx].y = size.y - radius;
-        velocities[idx].y *= -settings.collision_damping;
-    }
-    if positions[idx].z < radius {
-        positions[idx].z = radius;
-        velocities[idx].z *= -settings.collision_damping;
-    }
-    if positions[idx].z > size.z - radius {
-        positions[idx].z = size.z - radius;
-        velocities[idx].z *= -settings.collision_damping;
-    }
+
+    let pos = rot * lpos;
+    let vel = rot * lvel;
+
+    positions[idx] = pos.extend(0.0);
+    velocities[idx] = vel.extend(0.0);
 }
 
 #[spirv(compute(threads(256)))]
@@ -538,7 +552,7 @@ pub fn copy_prims(
 
     if id < settings.boundary_particles {
         prims[idx].translate = positions[idx].truncate();
-        prims[idx].color = vec4(0.2, 0.2, 0.2, 1.0);
+        prims[idx].color = vec4(0.2, 0.2, 0.2, 0.25);
         return;
     }
 
