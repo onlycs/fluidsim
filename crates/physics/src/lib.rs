@@ -241,8 +241,8 @@ pub fn update_densities(
                 predictions[idx] += random_offset.extend(0.0);
             }
 
-            let influence = curves::smoothing(dist, settings.smoothing_radius);
-            let near_influence = curves::smoothing_near(dist, settings.smoothing_radius);
+            let influence = curves::density(dist, settings.smoothing_radius);
+            let near_influence = curves::density_near(dist, settings.smoothing_radius);
 
             density += settings.mass * influence;
             near_density += settings.mass * near_influence;
@@ -350,12 +350,12 @@ pub fn pressure_force(
             let other_npressure_term = other_npressure / other_ndensity.max(f32::EPSILON).powi(2);
 
             // Regular pressure
-            let smoothing_term = dir * curves::smoothing_deriv(dist, settings.smoothing_radius);
+            let smoothing_term = dir * curves::density_deriv(dist, settings.smoothing_radius);
             let pressure_term = this_pressure_term + other_pressure_term;
             force += settings.mass * pressure_term * smoothing_term;
 
             // Near pressure
-            let nsmoothing_term = dir * curves::nsmoothing_deriv(dist, settings.smoothing_radius);
+            let nsmoothing_term = dir * curves::ndensity_deriv(dist, settings.smoothing_radius);
             let npressure_term = this_npressure_term + other_npressure_term;
             force += settings.mass * npressure_term * nsmoothing_term;
         }
@@ -416,7 +416,7 @@ pub fn viscosity(
             }
 
             let dist = dist_sq.sqrt();
-            let influence = curves::viscosity_smoothing(dist, settings.smoothing_radius);
+            let influence = curves::viscosity(dist, settings.smoothing_radius);
 
             let other_velocity = if other_id < settings.boundary_particles {
                 Vec3::ZERO

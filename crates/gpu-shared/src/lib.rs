@@ -47,8 +47,8 @@ impl Default for Settings {
             gravity: vec3(0.0, -9.8, 0.0),
             collision_damping: 0.40,
 
-            smoothing_radius: 0.60,
-            target_density: 20.0,
+            smoothing_radius: 0.40,
+            target_density: 40.0,
 
             near_pressure_multiplier: 50.0,
             pressure_multiplier: 500.0,
