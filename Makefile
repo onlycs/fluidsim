@@ -4,6 +4,7 @@ dist: dist-linux dist-win dist-osx
 
 dist-linux:
 	mkdir -p dist
+	rm dist/fluidsim-linux-x86_64.xz || true
 	cargo build --target x86_64-unknown-linux-gnu -p fluidsim --release
 	cp target/x86_64-unknown-linux-gnu/release/fluidsim dist/fluidsim-linux-x86_64
 	patchelf --remove-rpath dist/fluidsim-linux-x86_64
