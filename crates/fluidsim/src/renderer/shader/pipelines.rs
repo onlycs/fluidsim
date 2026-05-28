@@ -20,26 +20,20 @@ macro_rules! pipelines {
     (@dispatcher $v:ident $i:expr;) => ({});
 
     (@dispatcher $v:ident $i:expr; pre_sort $($entries:ident)*) => {
-        $v.push((|s, e, _q, b, d, n| {
-            e.write_timestamp(&b.profiler.query_set, $i);
-            s.pre_sort.dispatch(e, d, n);
-            e.write_timestamp(&b.profiler.query_set, $i + 1);
+        $v.push((|s, _q, p, n| {
+            s.pre_sort.dispatch(p, n);
         }) as Dispatcher);
 
-        $v.push((|s, e, q, b, _d, n| {
-            e.write_timestamp(&b.profiler.query_set, $i + 2);
-            s.sorter.sort(e, q, n);
-            e.write_timestamp(&b.profiler.query_set, $i + 3);
+        $v.push((|s, q, p, n| {
+            s.sorter.sort_with_pass(p, q, n);
         }) as Dispatcher);
 
         pipelines!(@dispatcher $v $i + 4; $($entries)*);
     };
 
     (@dispatcher $v:ident $i:expr; $entry:ident $($entries:ident)*) => {
-        $v.push((|s, e, _q, b, d, n| {
-            e.write_timestamp(&b.profiler.query_set, $i);
-            s.$entry.dispatch(e, d, n);
-            e.write_timestamp(&b.profiler.query_set, $i + 1);
+        $v.push((|s, _q, p, n| {
+            s.$entry.dispatch(p, n);
         }) as Dispatcher);
 
         pipelines!(@dispatcher $v $i + 2; $($entries)*);
@@ -69,12 +63,10 @@ macro_rules! pipelines {
     )+) => {
         pub const PIPELINES: usize = count!($($entry),+) + 1;
 
-        type Dispatcher = for<'a> fn(
+        type Dispatcher = for<'a, 'b> fn(
             &'a Pipelines,
-            &'a mut wgpu::CommandEncoder,
             &'a wgpu::Queue,
-            &'a crate::renderer::buffers::Buffers,
-            &'a wgpu::ComputePassDescriptor<'a>,
+            &'a mut wgpu::ComputePass<'b>,
             u32,
         );
 
@@ -180,11 +172,9 @@ macro_rules! pipelines {
 
                 pub fn dispatch(
                     &self,
-                    encoder: &mut wgpu::CommandEncoder,
-                    descriptor: &wgpu::ComputePassDescriptor<'_>,
+                    pass: &mut wgpu::ComputePass,
                     num_particles: u32,
                 ) {
-                    let mut pass = encoder.begin_compute_pass(descriptor);
                     pass.set_pipeline(&self.pipeline);
                     for (i, bg) in self.bind_groups.iter().enumerate() {
                         pass.set_bind_group(i as u32, bg, &[]);
@@ -197,24 +187,6 @@ macro_rules! pipelines {
                 }
             }
         )+
-
-        #[derive(Default, Clone, Copy)]
-        pub struct ComputeShaderPerformance {
-            $(pub $entry: f32,)+
-            pub sort: f32,
-            pub total: f32,
-        }
-
-        impl ::std::fmt::Display for ComputeShaderPerformance {
-            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-                write!(f, "Compute Shader Performance (ms):\n")?;
-                $(
-                    write!(f, "  {:<20}:\t{}\n", stringify!($entry), self.$entry)?;
-                )+
-                write!(f, "  {:<20}:\t{}\n", "sort", self.sort)?;
-                write!(f, "  {:<20}:\t{}\n", "total", self.total)
-            }
-        }
 
         pub struct Pipelines {
             $(pub $entry: $cty,)+
@@ -245,59 +217,18 @@ macro_rules! pipelines {
 
             pub fn dispatch_all(
                 &self,
-                device: &wgpu::Device,
                 encoder: &mut wgpu::CommandEncoder,
                 queue: &wgpu::Queue,
-                buffers: &Buffers,
                 descriptor: &wgpu::ComputePassDescriptor<'_>,
                 num_particles: u32,
-            ) -> wgpu::Buffer {
-                for dispatch in Self::iter() {
-                    dispatch(self, encoder, queue, buffers, descriptor, num_particles);
+            ) {
+                {
+                    let mut pass = encoder.begin_compute_pass(descriptor);
+
+                    for dispatch in Self::iter() {
+                        dispatch(self, queue, &mut pass, num_particles);
+                    }
                 }
-
-                let readback_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-                    label: Some("physics/profiler/readback_buffer"),
-                    size: buffers.profiler.query_buffer.size(),
-                    usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-                    mapped_at_creation: false,
-                });
-
-                // copy to readback buffer
-                encoder.resolve_query_set(
-                    &buffers.profiler.query_set,
-                    0..2 * PIPELINES as u32,
-                    &buffers.profiler.query_buffer,
-                    0,
-                );
-                encoder.copy_buffer_to_buffer(
-                    &buffers.profiler.query_buffer,
-                    0,
-                    &readback_buffer,
-                    0,
-                    2 * PIPELINES as u64 * ::std::mem::size_of::<u64>() as u64,
-                );
-
-                readback_buffer
-            }
-
-            pub fn profile(&self, queue: &wgpu::Queue, readback_buffer: wgpu::Buffer, set_profiler: impl FnOnce(ComputeShaderPerformance) + Send + Sync + 'static) {
-                let period = queue.get_timestamp_period(); // ns/tick
-
-                readback_buffer.clone().slice(..).map_async(wgpu::MapMode::Read, move |_| {
-                    let data = readback_buffer.slice(..).get_mapped_range();
-                    let timestamps: &[u64] = bytemuck::cast_slice(&data);
-
-                    let mut profiling = ComputeShaderPerformance {
-                        $($entry: 0.0,)+
-                        sort: 0.0,
-                        total: 0.0,
-                    };
-
-                    pipelines!(@profile profiling timestamps period 0; $($entry)*);
-
-                    set_profiler(profiling);
-                });
             }
         }
     };

@@ -1,18 +1,14 @@
-use std::collections::HashSet;
+use std::{collections::HashMap, iter, time::Instant};
 
 use glam::{Vec2, vec2};
-use gpu_shared::MouseState;
 use winit::{
-    event::{Modifiers, MouseButton, WindowEvent},
+    event::{KeyEvent, MouseButton, WindowEvent},
     keyboard::{KeyCode, PhysicalKey},
 };
 
-use crate::renderer::shader::physics::PhysicsShader;
-
 #[derive(Default)]
 pub(crate) struct InputProcessor {
-    pub(crate) keys: HashSet<KeyCode>,
-    pub(crate) mods: Modifiers,
+    pub(crate) keys: HashMap<KeyCode, Instant>,
 
     mouse_pos: Vec2,
     lmb: bool,
@@ -21,8 +17,15 @@ pub(crate) struct InputProcessor {
 
 pub(crate) enum HumanInput {
     None,
-    Keyboard,
-    Mouse,
+    Keyboard {
+        ui: Vec<KeyCode>,
+        motion: Vec<KeyCode>,
+    },
+    Mouse {
+        position: Vec2,
+        lmb: bool,
+        rmb: bool,
+    },
 }
 
 impl InputProcessor {
@@ -30,26 +33,28 @@ impl InputProcessor {
         match event {
             WindowEvent::KeyboardInput {
                 device_id: _,
-                event,
+                event:
+                    KeyEvent {
+                        physical_key: PhysicalKey::Code(key),
+                        state,
+                        repeat: false,
+                        ..
+                    },
                 is_synthetic: _,
             } => {
-                let PhysicalKey::Code(key) = event.physical_key else {
-                    return HumanInput::None;
-                };
-
-                if event.state.is_pressed() {
-                    self.keys.insert(key);
+                if state.is_pressed() {
+                    self.keys.insert(*key, Instant::now());
+                    HumanInput::Keyboard {
+                        ui: self.ui_keys().chain(iter::once(*key)).collect(),
+                        motion: self.keys.keys().copied().collect(),
+                    }
                 } else {
-                    self.keys.remove(&key);
+                    self.keys.remove(key);
+                    HumanInput::Keyboard {
+                        ui: self.ui_keys().collect(),
+                        motion: self.keys.keys().copied().collect(),
+                    }
                 }
-
-                HumanInput::Keyboard
-            }
-            WindowEvent::ModifiersChanged(mods) => {
-                self.keys.clear();
-                self.mods = *mods;
-
-                HumanInput::Keyboard
             }
             WindowEvent::CursorMoved {
                 device_id: _,
@@ -57,7 +62,11 @@ impl InputProcessor {
             } => {
                 self.mouse_pos = vec2(pos.x as f32, pos.y as f32);
 
-                HumanInput::Mouse
+                HumanInput::Mouse {
+                    position: self.mouse_pos,
+                    lmb: self.lmb,
+                    rmb: self.rmb,
+                }
             }
             WindowEvent::MouseInput {
                 device_id: _,
@@ -70,17 +79,24 @@ impl InputProcessor {
                     _ => return HumanInput::None,
                 }
 
-                HumanInput::Mouse
+                HumanInput::Mouse {
+                    position: self.mouse_pos,
+                    lmb: self.lmb,
+                    rmb: self.rmb,
+                }
             }
-            _ => HumanInput::None,
+            _ if self.keys.is_empty() => HumanInput::None,
+            _ => HumanInput::Keyboard {
+                ui: self.ui_keys().collect(),
+                motion: self.keys.keys().copied().collect(),
+            },
         }
     }
 
-    pub(crate) fn write_mouse(&self, physics: &mut PhysicsShader) {
-        physics.set_mouse(MouseState::new(self.mouse_pos, self.lmb, self.rmb));
-    }
-
-    pub(crate) fn keydown(&self) -> impl Iterator<Item = KeyCode> + '_ {
-        self.keys.iter().copied()
+    fn ui_keys(&self) -> impl Iterator<Item = KeyCode> + '_ {
+        self.keys
+            .iter()
+            .filter(|(_, t)| t.elapsed().as_millis() > 350)
+            .map(|(k, _)| *k)
     }
 }

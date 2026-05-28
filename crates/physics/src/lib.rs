@@ -124,29 +124,8 @@ pub fn external_forces(
     }
 
     let idx = id as usize;
-    let gravity = vec3(0.0, -settings.gravity, 0.0);
+    let gravity = settings.gravity;
     let force = gravity;
-
-    // if mouse.left() || mouse.right() {
-    //     let mousepos = mouse.position / SCALE;
-    //     let offset = mousepos - positions[idx];
-    //     let dist2 = offset.dot(offset);
-    //     let interaction_radius_sq = settings.interaction_radius *
-    // settings.interaction_radius;
-
-    //     if dist2 < interaction_radius_sq {
-    //         let inv_dist = q_rsqrt(dist2);
-    //         let edge = 1.0 / (inv_dist * settings.interaction_radius);
-    //         let center = 1.0 - edge;
-    //         let dir = offset * inv_dist;
-    //         let strength = settings.interaction_strength * mouse.intensity();
-
-    //         let gweight = 1.0 - (center * (strength * 0.1).clamp(0.0, 1.0));
-    //         let accel = gravity * gweight + dir * center * strength;
-
-    //         force = accel - velocities[idx] * center;
-    //     }
-    // }
 
     velocities[idx] += (force * settings.dtime).extend(0.0);
 

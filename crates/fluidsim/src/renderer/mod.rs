@@ -139,10 +139,9 @@ impl RendererInit {
 
         let framesteps = self.state.gfx.steps_per_frame;
         let dtime = self.state.dtime() / framesteps as f32;
-        let mut readback_buffers = vec![];
 
         for _ in 0..framesteps {
-            readback_buffers.push(self.physics.update(device, queue, &mut encoder, dtime));
+            self.physics.update(queue, &mut encoder, dtime);
         }
 
         // draw particles
@@ -176,13 +175,6 @@ impl RendererInit {
 
         queue.submit(Some(encoder.finish()));
         surface_tex.present();
-
-        for buf in readback_buffers {
-            let p = Arc::clone(&self.perf.data);
-            self.physics.pipelines.profile(queue, buf, move |profile| {
-                *p.lock().unwrap() = profile;
-            });
-        }
 
         device.poll(wgpu::PollType::Poll).context(PollSnafu)?;
 
@@ -238,6 +230,9 @@ impl Renderer {
     }
 }
 
+const TRANSLATE_STRENGTH: f32 = 0.175;
+const ROTATE_STRENGTH: f32 = 0.025;
+
 impl ApplicationHandler for Renderer {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
         let Self::Init(this) = self else {
@@ -253,8 +248,8 @@ impl ApplicationHandler for Renderer {
         }
 
         match this.input.process(&event) {
-            HumanInput::Keyboard => {
-                for key in this.input.keydown() {
+            HumanInput::Keyboard { ui, motion } => {
+                for key in ui {
                     match key {
                         KeyCode::Escape => {
                             info!("Got escape, quitting!");
@@ -266,50 +261,56 @@ impl ApplicationHandler for Renderer {
                         KeyCode::KeyC => this.panel.toggle_self(),
                         KeyCode::KeyH => this.panel.toggle_help(),
                         KeyCode::KeyP => this.perf.toggle(),
+                        _ => {}
+                    }
+                }
+
+                for key in motion {
+                    match key {
                         KeyCode::KeyW => {
                             let q = this.state.player.q_yaw();
-                            this.state.player.translate += q * Vec3::new(0.0, 0.0, -1.0) * 0.5;
+                            this.state.player.translate += q * Vec3::NEG_Z * TRANSLATE_STRENGTH;
                         }
                         KeyCode::KeyS => {
                             let q = this.state.player.q_yaw();
-                            this.state.player.translate += q * Vec3::new(0.0, 0.0, 1.0) * 0.5;
+                            this.state.player.translate += q * Vec3::Z * TRANSLATE_STRENGTH;
                         }
                         KeyCode::KeyA => {
                             let q = this.state.player.q_yaw();
-                            this.state.player.translate += q * Vec3::new(-1.0, 0.0, 0.0) * 0.5;
+                            this.state.player.translate += q * Vec3::NEG_X * TRANSLATE_STRENGTH;
                         }
                         KeyCode::KeyD => {
                             let q = this.state.player.q_yaw();
-                            this.state.player.translate += q * Vec3::new(1.0, 0.0, 0.0) * 0.5;
+                            this.state.player.translate += q * Vec3::X * TRANSLATE_STRENGTH;
                         }
                         KeyCode::ShiftLeft | KeyCode::ShiftRight => {
-                            this.state.player.translate.y += 0.5;
+                            this.state.player.translate.y += TRANSLATE_STRENGTH;
                         }
                         KeyCode::ControlLeft | KeyCode::ControlRight => {
-                            this.state.player.translate.y -= 0.5;
+                            this.state.player.translate.y -= TRANSLATE_STRENGTH;
                         }
                         KeyCode::Numpad8 => {
-                            let rot = Quat::from_rotation_x(0.1);
+                            let rot = Quat::from_rotation_x(ROTATE_STRENGTH);
                             this.state.player.q *= rot;
                         }
                         KeyCode::Numpad2 => {
-                            let rot = Quat::from_rotation_x(-0.1);
+                            let rot = Quat::from_rotation_x(-ROTATE_STRENGTH);
                             this.state.player.q *= rot;
                         }
                         KeyCode::Numpad4 => {
-                            let rot = Quat::from_rotation_y(0.1);
+                            let rot = Quat::from_rotation_y(ROTATE_STRENGTH);
                             this.state.player.q = rot * this.state.player.q;
                         }
                         KeyCode::Numpad6 => {
-                            let rot = Quat::from_rotation_y(-0.1);
+                            let rot = Quat::from_rotation_y(-ROTATE_STRENGTH);
                             this.state.player.q = rot * this.state.player.q;
                         }
                         _ => {}
                     }
                 }
             }
-            HumanInput::Mouse => {
-                this.input.write_mouse(&mut this.physics);
+            HumanInput::Mouse { position, lmb, rmb } => {
+                this.physics.set_mouse(position, lmb, rmb);
             }
             HumanInput::None => {}
         }

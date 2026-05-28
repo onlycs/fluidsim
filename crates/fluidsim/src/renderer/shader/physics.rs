@@ -1,4 +1,4 @@
-use glam::vec3;
+use glam::{Vec2, vec3};
 use wgpu_sort::Sorter;
 
 use super::pipelines::Pipelines;
@@ -54,7 +54,7 @@ impl PhysicsShader {
         buffers.sort.keys.reset(queue, &MAX_ARRAY);
 
         let pass_descriptor = wgpu::ComputePassDescriptor {
-            label: Some("physics/pass_descriptor"),
+            label: Some("physics/compute_pass"),
             timestamp_writes: None,
         };
 
@@ -97,7 +97,7 @@ impl PhysicsShader {
         let mut positions = unsafe { Box::<[[f32; 4]; ARRAY_LEN]>::new_zeroed().assume_init() };
 
         let mut ctr = 0;
-        for rn in 0..2 {
+        for rn in 0..1 {
             let rn = rn as f32;
             let tl = r1_tl - rn * sprest;
             let count = (r1_count + 2. * rn).as_uvec3();
@@ -169,15 +169,19 @@ impl PhysicsShader {
         self.buffers.sort.keys.reset(queue, &MAX_ARRAY);
 
         sim.time.pause();
+
+        debug!(
+            "reset simulation with {} particles ({} boundary)",
+            settings.num_particles, settings.boundary_particles
+        );
     }
 
     pub(crate) fn update(
         &mut self,
-        device: &wgpu::Device,
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
         dtime: f32,
-    ) -> wgpu::Buffer {
+    ) {
         self.udata.settings.dtime = dtime;
 
         self.buffers
@@ -187,21 +191,19 @@ impl PhysicsShader {
         self.buffers.uniform.mouse.reset(queue, &[self.udata.mouse]);
 
         self.pipelines.dispatch_all(
-            device,
             encoder,
             queue,
-            &self.buffers,
             &self.pass_desc,
             self.udata.settings.num_particles,
-        )
+        );
     }
 
     pub(crate) fn lease_panel(&mut self) -> &mut SimSettings {
         &mut self.udata.settings
     }
 
-    pub(crate) fn set_mouse(&mut self, mouse: MouseState) {
-        self.udata.mouse = mouse;
+    pub(crate) fn set_mouse(&mut self, pos: Vec2, lmb: bool, rmb: bool) {
+        self.udata.mouse = MouseState::new(pos, lmb, rmb);
     }
 
     pub(crate) fn buffers(&self) -> &Buffers {

@@ -3,7 +3,7 @@
 
 #[cfg(not(target_arch = "spirv"))]
 use bytemuck::{Pod, Zeroable};
-use glam::{Mat4, Quat, UVec2, UVec3, Vec2, Vec3, Vec4};
+use glam::{Mat4, Quat, UVec2, UVec3, Vec2, Vec3, Vec4, vec3};
 #[cfg(target_arch = "spirv")]
 use spirv_std::glam;
 
@@ -14,9 +14,9 @@ pub const DEFAULT_PARTICLES: UVec3 = UVec3::new(15, 15, 15);
 #[cfg_attr(not(target_arch = "spirv"), derive(Pod, Zeroable))]
 #[repr(C)]
 pub struct Settings {
-    pub dtime: f32,
+    pub gravity: Vec3,
 
-    pub gravity: f32,
+    pub dtime: f32,
     pub collision_damping: f32,
 
     pub smoothing_radius: f32,
@@ -34,10 +34,8 @@ pub struct Settings {
     pub boundary_particles: u32,
     pub particle_radius: f32,
 
-    pub _pad0: f32,
-    pub _pad1: f32,
     pub box_size: Vec3,
-    pub _pad2: f32,
+    pub _pad: f32,
     pub box_quat: Quat,
 }
 
@@ -46,7 +44,7 @@ impl Default for Settings {
         Self {
             dtime: 0.002,
 
-            gravity: 9.8,
+            gravity: vec3(0.0, -9.8, 0.0),
             collision_damping: 0.40,
 
             smoothing_radius: 0.60,
@@ -66,9 +64,7 @@ impl Default for Settings {
 
             mass: 1.0,
             particle_radius: 0.05,
-            _pad0: 0.0,
-            _pad1: 0.0,
-            _pad2: 0.0,
+            _pad: 0.0,
         }
     }
 }
@@ -83,10 +79,10 @@ pub struct MouseState {
 }
 
 impl MouseState {
-    pub fn new(px: Vec2, left: bool, right: bool) -> Self {
+    pub fn new(p: Vec2, lmb: bool, rmb: bool) -> Self {
         Self {
-            position: px,
-            clickmask: (left as u32) | ((right as u32) << 1),
+            position: p,
+            clickmask: (lmb as u32) | ((rmb as u32) << 1),
             ..Self::default()
         }
     }

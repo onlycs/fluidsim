@@ -51,9 +51,9 @@ impl PlayerTransform {
     }
 
     pub(crate) fn q_yaw(&self) -> Quat {
-        let fwd = self.q * Vec3::Z;
-        let yaw = fwd.z.atan2(fwd.x);
-        Quat::from_rotation_y(yaw)
+        let fwd = self.q * Vec3::NEG_Z;
+        let fwd_xz = Vec3::new(fwd.x, 0.0, fwd.z).normalize();
+        Quat::from_rotation_arc(Vec3::NEG_Z, fwd_xz)
     }
 }
 

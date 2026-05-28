@@ -75,7 +75,18 @@ impl Panel {
                 ui.add_space(25.0);
                 ui.label(RichText::new("Physics Settings").size(TEXT_SIZE).strong());
 
-                ui.add(Slider::new(&mut settings.gravity, -20.0..=20.0).text("Gravity"));
+                ui.collapsing("Gravity", |ui| {
+                    ui.add(Slider::new(&mut settings.gravity.x, -20.0..=20.0).text("Gravity X"))
+                        .changed();
+
+                    ui.add(Slider::new(&mut settings.gravity.y, -20.0..=20.0).text("Gravity Y"))
+                        .changed();
+
+                    ui.add(Slider::new(&mut settings.gravity.z, -20.0..=20.0).text("Gravity Z"))
+                        .changed();
+
+                    ui.add_space(5.0);
+                });
 
                 ui.add(
                     Slider::new(&mut settings.collision_damping, 0.0..=1.0)
@@ -214,11 +225,10 @@ impl Panel {
                     ui.add_space(10.0);
                     ui.label("Press space to pause/play the simulation");
                     ui.label("Press the right arrow to step the simulation");
-                    ui.label("Use the left mouse button to pull particles");
-                    ui.label("Use the right mouse button to push particles");
+                    ui.label("Use WASD and the 2/8/4/6 numpad keys to move and rotate the camera");
+                    ui.label("The red line is the X axis, green=Y, and blue=Z");
                     ui.label("Press 'R' to restart");
                     ui.label("Press 'C' to toggle this panel");
-                    ui.label("Press 'P' to toggle debug performance info");
                     ui.label("Press 'H' to toggle this help text");
                 }
             });

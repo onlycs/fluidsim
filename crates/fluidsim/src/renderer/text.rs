@@ -1,12 +1,10 @@
-use std::sync::Mutex;
-
 use glyphon::{
     Attrs, Buffer, Cache, Color, Family, FontSystem, Metrics, Resolution, SwashCache, TextArea,
     TextAtlas, TextBounds, TextRenderer, Viewport, Weight, cosmic_text::Align,
 };
 use wgpu::{CommandEncoder, MultisampleState, TextureView};
 
-use super::{graphics::GraphicsContext, shader::pipelines::ComputeShaderPerformance};
+use super::graphics::GraphicsContext;
 use crate::{prelude::*, renderer::state::SimulationState};
 
 const FONT_SIZE: f32 = 18.0;
@@ -42,8 +40,6 @@ pub(crate) struct PerformanceDisplay {
     buffer_fps: Buffer,
     buffer_xyzrpy: Buffer,
 
-    pub(crate) data: Arc<Mutex<ComputeShaderPerformance>>,
-    last_data: ComputeShaderPerformance,
     pub(crate) show: bool,
 
     timer: Instant,
@@ -79,8 +75,6 @@ impl PerformanceDisplay {
             buffer_fps,
             buffer_xyzrpy,
             show: false,
-            data: Arc::new(Mutex::new(ComputeShaderPerformance::default())),
-            last_data: ComputeShaderPerformance::default(),
             timer: Instant::now(),
             frames: 0,
             fps: 0.0,
@@ -120,7 +114,6 @@ impl PerformanceDisplay {
         if self.timer.elapsed().as_secs_f32() > 1.0 {
             self.fps = self.frames as f32 / self.timer.elapsed().as_secs_f32();
             self.frames = 0;
-            self.last_data = *self.data.lock().unwrap();
             self.timer = Instant::now();
         }
     }
@@ -133,11 +126,7 @@ impl PerformanceDisplay {
         view: &TextureView,
         state: &SimulationState,
     ) -> Result<(), TextError> {
-        let fps_text = if self.show {
-            format!("{}\nFPS: {:.2}", self.last_data, self.fps)
-        } else {
-            format!("FPS: {:.2}", self.fps)
-        };
+        let fps_text = format!("FPS: {:.2}", self.fps);
 
         self.buffer_fps.set_text(
             &mut self.font_system,

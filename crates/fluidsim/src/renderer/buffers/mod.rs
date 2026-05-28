@@ -93,37 +93,9 @@ macro_rules! buffers {
             }
         }
 
-        pub struct Profiler {
-            pub query_set: wgpu::QuerySet,
-            pub query_buffer: Arc<wgpu::Buffer>,
-        }
-
-        impl Profiler {
-            fn new(device: &wgpu::Device) -> Self {
-                let query_set = device.create_query_set(&wgpu::QuerySetDescriptor {
-                    label: Some("physics/profiler/query_set"),
-                    ty: wgpu::QueryType::Timestamp,
-                    count: 2 * super::shader::pipelines::PIPELINES as u32,
-                });
-
-                let query_buffer = Arc::new(device.create_buffer(&wgpu::BufferDescriptor {
-                    label: Some("physics/profiler/query_buffer"),
-                    size: 2 * super::shader::pipelines::PIPELINES as u64 * ::std::mem::size_of::<u64>() as u64,
-                    usage: wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::QUERY_RESOLVE,
-                    mapped_at_creation: false,
-                }));
-
-                Self {
-                    query_set,
-                    query_buffer,
-                }
-            }
-        }
-
         pub struct Buffers {
             $(pub $gid: $gty,)+
             pub sort: Sort,
-            pub profiler: Profiler,
         }
 
         impl Buffers {
@@ -131,7 +103,6 @@ macro_rules! buffers {
                 Self {
                     $($gid: $gty::buffers(&device),)+
                     sort: Sort::new(sorter.buffer_keys(), sorter.buffer_values()),
-                    profiler: Profiler::new(device),
                 }
             }
         }
