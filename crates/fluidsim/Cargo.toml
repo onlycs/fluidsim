@@ -1,6 +1,6 @@
 [package]
 name = "fluidsim"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2024"
 
 [dependencies]
@@ -23,7 +23,6 @@ wgpu = { version = "29.0.3", default-features = false, features = [
     "webgpu",
 ] }
 wgpu-sort = { git = "https://github.com/onlycs/wgpu-algorithms" }
-# wgpu-sort = { path = "../../../wgpu-algorithms" }
 winit = { version = "0.30.8", features = ["wayland"] }
 
 [dependencies.egui-wgpu]
