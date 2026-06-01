@@ -26,13 +26,13 @@ pub fn density(dist: f32, radius: f32) -> f32 {
 
 // \int_0^{2\pi}
 //      \int_0^\pi
-//          \int_0^h [(h-r)^2 \times r^3 \times \sin \theta] dr
+//          \int_0^h [(h-r)^3 \times r^2 \times \sin \theta] dr
 //      d\theta
 // d\phi
 //
 // = (\int_0^{2\pi} d\phi)
 //   (\int_0^{\pi} \sin \theta d\theta)
-//   (\int_0^h [(h-r)^2 \times r^3] dr)
+//   (\int_0^h [(h-r)^3 \times r^2] dr)
 //
 // = \frac{\pi \times h^6}{15}
 pub fn density_near(dist: f32, radius: f32) -> f32 {

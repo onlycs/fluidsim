@@ -47,7 +47,7 @@ impl PlayerTransform {
 
     pub(crate) fn projection_matrix(&self, screen: UVec2) -> Mat4 {
         let screen = screen.as_vec2();
-        Mat4::perspective_rh(self.fov, screen.x / screen.y, 0.01, 200.0)
+        Mat4::perspective_rh(self.fov, screen.x / screen.y, 0.1, 1000.0)
     }
 
     pub(crate) fn q_yaw(&self) -> Quat {
